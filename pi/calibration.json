@@ -1,0 +1,8 @@
+{
+    "tds_offset": 0,
+    "tds_scale": 1.0,
+    "turbidity_offset": 0,
+    "turbidity_scale": 1.0,
+    "calibration_date": null,
+    "notes": "Run calibration with known TDS solution and clear water for turbidity"
+}
