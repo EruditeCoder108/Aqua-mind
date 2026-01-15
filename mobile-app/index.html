@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
@@ -7,19 +8,23 @@
     <meta name="description" content="Aqua-Mind - AI-Powered Water Quality Intelligence for Jal Jeevan Mission">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    
+
     <title>Aqua-Mind | Water Intelligence</title>
-    
+
     <link rel="manifest" href="manifest.json">
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💧</text></svg>">
-    
+    <link rel="icon" type="image/svg+xml"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💧</text></svg>">
+
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+
     <link rel="stylesheet" href="css/style.css">
 </head>
+
 <body>
     <!-- Splash Screen -->
     <div id="splash" class="splash">
@@ -67,8 +72,8 @@
                 <div class="score-ring-container">
                     <svg class="score-ring" viewBox="0 0 200 200">
                         <circle class="score-ring-bg" cx="100" cy="100" r="85"></circle>
-                        <circle class="score-ring-progress" cx="100" cy="100" r="85" 
-                                stroke-dasharray="534" stroke-dashoffset="534"></circle>
+                        <circle class="score-ring-progress" cx="100" cy="100" r="85" stroke-dasharray="534"
+                            stroke-dashoffset="534"></circle>
                     </svg>
                     <div class="score-value-container">
                         <span class="score-label">Jal-Score</span>
@@ -93,7 +98,7 @@
                             <div id="bar-tds" class="reading-bar-fill" style="width: 0%"></div>
                         </div>
                     </div>
-                    
+
                     <div class="reading-card" data-param="turb">
                         <div class="reading-icon">💨</div>
                         <div class="reading-info">
@@ -104,7 +109,7 @@
                             <div id="bar-turb" class="reading-bar-fill" style="width: 0%"></div>
                         </div>
                     </div>
-                    
+
                     <div class="reading-card" data-param="temp">
                         <div class="reading-icon">🌡️</div>
                         <div class="reading-info">
@@ -115,7 +120,7 @@
                             <div id="bar-temp" class="reading-bar-fill" style="width: 0%"></div>
                         </div>
                     </div>
-                    
+
                     <div class="reading-card" data-param="stability">
                         <div class="reading-icon">📊</div>
                         <div class="reading-info">
@@ -208,7 +213,8 @@
                 <div class="setting-group">
                     <label class="setting-label">Regional Profile</label>
                     <select id="setting-profile" class="setting-select">
-                        <option value="JABALPUR">Jabalpur, Madhya Pradesh</option>
+                        <option value="DHANWANTRI_NAGAR" selected>Dhanwantri Nagar, Jabalpur</option>
+                        <option value="JABALPUR">Jabalpur City, MP</option>
                         <option value="JAIPUR">Jaipur, Rajasthan</option>
                         <option value="CHENNAI">Chennai, Tamil Nadu</option>
                         <option value="DELHI">Delhi NCR</option>
@@ -216,28 +222,28 @@
                         <option value="MUMBAI">Mumbai, Maharashtra</option>
                     </select>
                 </div>
-                
+
                 <div class="setting-group">
                     <label class="setting-label">Gemini API Key</label>
-                    <input type="password" id="setting-api-key" class="setting-input" 
-                           placeholder="Enter your API key">
-                    <p class="setting-hint">Get your key from <a href="https://aistudio.google.com/apikey" target="_blank">Google AI Studio</a></p>
+                    <input type="password" id="setting-api-key" class="setting-input" placeholder="Enter your API key">
+                    <p class="setting-hint">Get your key from <a href="https://aistudio.google.com/apikey"
+                            target="_blank">Google AI Studio</a></p>
                 </div>
-                
+
                 <div class="setting-group">
                     <label class="setting-label">
                         <input type="checkbox" id="setting-auto-ai" checked>
                         Auto-run AI analysis
                     </label>
                 </div>
-                
+
                 <div class="setting-group">
                     <label class="setting-label">
                         <input type="checkbox" id="setting-notifications">
                         Enable notifications
                     </label>
                 </div>
-                
+
                 <div class="setting-group">
                     <label class="setting-label">Simulation Mode (for testing)</label>
                     <select id="setting-simulation" class="setting-select">
@@ -264,4 +270,5 @@
     <script src="js/gemini.js"></script>
     <script src="js/app.js"></script>
 </body>
+
 </html>

@@ -429,7 +429,7 @@ class AquaMindApp {
 
     _loadSettings() {
         const defaults = {
-            profile: 'JABALPUR',
+            profile: 'DHANWANTRI_NAGAR',
             apiKey: '',
             autoAi: true,
             notifications: false,
