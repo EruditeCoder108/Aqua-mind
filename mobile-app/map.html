@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0a1628">
+    <title>Aqua-Mind | Network Map</title>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0a1628;
+            color: #fff;
+            min-height: 100vh;
+        }
+
+        /* Header */
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            height: 60px;
+            padding: 0 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(10, 22, 40, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .back-btn {
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            border-radius: 10px;
+            color: #fff;
+            font-size: 20px;
+            cursor: pointer;
+        }
+
+        .header-title {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .header-subtitle {
+            font-size: 11px;
+            color: #6b8299;
+        }
+
+        /* Map Container */
+        #map {
+            position: fixed;
+            top: 60px;
+            left: 0;
+            right: 0;
+            bottom: 80px;
+            z-index: 1;
+        }
+
+        /* Legend */
+        .legend {
+            position: fixed;
+            bottom: 100px;
+            left: 16px;
+            z-index: 1000;
+            background: rgba(10, 22, 40, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 12px 16px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .legend-title {
+            font-size: 11px;
+            color: #6b8299;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            margin-bottom: 4px;
+        }
+
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .legend-dot.safe {
+            background: #00e676;
+        }
+
+        .legend-dot.caution {
+            background: #ffab00;
+        }
+
+        .legend-dot.unsafe {
+            background: #ff5252;
+        }
+
+        .legend-dot.device {
+            background: #00d4ff;
+            box-shadow: 0 0 10px #00d4ff;
+        }
+
+        /* Stats Panel */
+        .stats-panel {
+            position: fixed;
+            bottom: 100px;
+            right: 16px;
+            z-index: 1000;
+            background: rgba(10, 22, 40, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 12px 16px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            min-width: 140px;
+        }
+
+        .stats-title {
+            font-size: 11px;
+            color: #6b8299;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            margin-bottom: 4px;
+        }
+
+        .stat-value {
+            font-weight: 600;
+        }
+
+        .stat-value.safe {
+            color: #00e676;
+        }
+
+        .stat-value.caution {
+            color: #ffab00;
+        }
+
+        .stat-value.unsafe {
+            color: #ff5252;
+        }
+
+        /* Alert Banner */
+        .alert-banner {
+            position: fixed;
+            top: 70px;
+            left: 16px;
+            right: 16px;
+            z-index: 1000;
+            background: linear-gradient(135deg, rgba(255, 82, 82, 0.9), rgba(200, 50, 50, 0.9));
+            border-radius: 12px;
+            padding: 12px 16px;
+            display: none;
+            animation: slideDown 0.3s ease;
+        }
+
+        .alert-banner.show {
+            display: block;
+        }
+
+        @keyframes slideDown {
+            from {
+                transform: translateY(-20px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .alert-content {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .alert-icon {
+            font-size: 24px;
+        }
+
+        .alert-text {
+            flex: 1;
+        }
+
+        .alert-title {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .alert-desc {
+            font-size: 12px;
+            opacity: 0.9;
+        }
+
+        /* Bottom Nav */
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 80px;
+            z-index: 1000;
+            background: rgba(10, 22, 40, 0.95);
+            backdrop-filter: blur(10px);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+        }
+
+        .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            background: none;
+            border: none;
+            color: #6b8299;
+            font-size: 11px;
+            cursor: pointer;
+            padding: 8px 16px;
+        }
+
+        .nav-item.active {
+            color: #00d4ff;
+        }
+
+        .nav-icon {
+            font-size: 20px;
+        }
+
+        /* Pulse Animation for Device Marker */
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+                opacity: 1;
+            }
+
+            50% {
+                transform: scale(1.5);
+                opacity: 0.5;
+            }
+
+            100% {
+                transform: scale(2);
+                opacity: 0;
+            }
+        }
+
+        .pulse-marker {
+            position: relative;
+        }
+
+        .pulse-ring {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            border: 2px solid #00d4ff;
+            animation: pulse 2s infinite;
+        }
+
+        /* Custom Leaflet Popup Styling */
+        .leaflet-popup-content-wrapper {
+            background: rgba(10, 22, 40, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .leaflet-popup-content {
+            color: #fff;
+            font-family: 'Inter', sans-serif;
+            margin: 12px 16px;
+        }
+
+        .leaflet-popup-tip {
+            background: rgba(10, 22, 40, 0.95);
+        }
+
+        .popup-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .popup-status {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+
+        .popup-status.safe {
+            background: rgba(0, 230, 118, 0.2);
+            color: #00e676;
+        }
+
+        .popup-status.caution {
+            background: rgba(255, 171, 0, 0.2);
+            color: #ffab00;
+        }
+
+        .popup-status.unsafe {
+            background: rgba(255, 82, 82, 0.2);
+            color: #ff5252;
+        }
+
+        .popup-detail {
+            font-size: 12px;
+            color: #a0b4c9;
+        }
+
+        .popup-cluster {
+            background: rgba(255, 82, 82, 0.2);
+            border-left: 3px solid #ff5252;
+            padding: 8px 12px;
+            margin-top: 8px;
+            border-radius: 4px;
+        }
+
+        .popup-cluster-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #ff5252;
+        }
+
+        .popup-cluster-desc {
+            font-size: 11px;
+            color: #a0b4c9;
+            margin-top: 4px;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-left">
+            <button class="back-btn" onclick="window.location.href='index.html'">←</button>
+            <div>
+                <div class="header-title">🗺️ Network Map</div>
+                <div class="header-subtitle">Dhanwantri Nagar, Jabalpur</div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Alert Banner (shows when cluster detected) -->
+    <div id="alert-banner" class="alert-banner">
+        <div class="alert-content">
+            <span class="alert-icon">⚠️</span>
+            <div class="alert-text">
+                <div class="alert-title">Contamination Cluster Detected</div>
+                <div class="alert-desc">3 devices reporting high turbidity in Sector 4</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Map -->
+    <div id="map"></div>
+
+    <!-- Legend -->
+    <div class="legend">
+        <div class="legend-title">Device Status</div>
+        <div class="legend-item">
+            <span class="legend-dot device"></span>
+            <span>Your Device (Live)</span>
+        </div>
+        <div class="legend-item">
+            <span class="legend-dot safe"></span>
+            <span>Safe (Score 80+)</span>
+        </div>
+        <div class="legend-item">
+            <span class="legend-dot caution"></span>
+            <span>Caution (50-80)</span>
+        </div>
+        <div class="legend-item">
+            <span class="legend-dot unsafe"></span>
+            <span>Unsafe (<50)< /span>
+        </div>
+    </div>
+
+    <!-- Stats Panel -->
+    <div class="stats-panel">
+        <div class="stats-title">Network Stats</div>
+        <div class="stat-row">
+            <span>Total Devices</span>
+            <span class="stat-value" id="stat-total">12</span>
+        </div>
+        <div class="stat-row">
+            <span>Safe</span>
+            <span class="stat-value safe" id="stat-safe">7</span>
+        </div>
+        <div class="stat-row">
+            <span>Caution</span>
+            <span class="stat-value caution" id="stat-caution">2</span>
+        </div>
+        <div class="stat-row">
+            <span>Unsafe</span>
+            <span class="stat-value unsafe" id="stat-unsafe">3</span>
+        </div>
+    </div>
+
+    <!-- Bottom Nav -->
+    <nav class="bottom-nav">
+        <button class="nav-item" onclick="window.location.href='index.html'">
+            <span class="nav-icon">🏠</span>
+            <span>Home</span>
+        </button>
+        <button class="nav-item active">
+            <span class="nav-icon">🗺️</span>
+            <span>Map</span>
+        </button>
+        <button class="nav-item" onclick="window.location.href='index.html'">
+            <span class="nav-icon">📊</span>
+            <span>History</span>
+        </button>
+        <button class="nav-item" onclick="window.location.href='index.html'">
+            <span class="nav-icon">⚙️</span>
+            <span>Settings</span>
+        </button>
+    </nav>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        // ========================================
+        // AQUA-MIND GHOST MAP - Network Visualization
+        // ========================================
+
+        // Configuration - Dhanwantri Nagar, Jabalpur coordinates
+        const CONFIG = {
+            center: [23.1815, 79.9864],  // Dhanwantri Nagar approx location
+            zoom: 16,
+            deviceId: "AM-001-DNJ"  // Your device ID
+        };
+
+        // ========================================
+        // GHOST NODES - Simulated Network Devices
+        // ========================================
+        // These represent "other Aqua-Mind devices in the network"
+        // In a real deployment, this would come from a server
+
+        const ghostNodes = [
+            // SAFE nodes (Green)
+            {
+                id: "AM-002",
+                location: [23.1825, 79.9874],
+                status: "safe",
+                score: 88,
+                tds: 180,
+                turbidity: 0.8,
+                cause: null,
+                lastUpdate: "2 min ago"
+            },
+            {
+                id: "AM-003",
+                location: [23.1808, 79.9852],
+                status: "safe",
+                score: 92,
+                tds: 145,
+                turbidity: 0.5,
+                cause: null,
+                lastUpdate: "5 min ago"
+            },
+            {
+                id: "AM-004",
+                location: [23.1830, 79.9848],
+                status: "safe",
+                score: 85,
+                tds: 210,
+                turbidity: 1.2,
+                cause: null,
+                lastUpdate: "1 min ago"
+            },
+            {
+                id: "AM-005",
+                location: [23.1798, 79.9880],
+                status: "safe",
+                score: 90,
+                tds: 165,
+                turbidity: 0.6,
+                cause: null,
+                lastUpdate: "8 min ago"
+            },
+            {
+                id: "AM-006",
+                location: [23.1840, 79.9890],
+                status: "safe",
+                score: 87,
+                tds: 195,
+                turbidity: 0.9,
+                cause: null,
+                lastUpdate: "3 min ago"
+            },
+            {
+                id: "AM-007",
+                location: [23.1805, 79.9900],
+                status: "safe",
+                score: 83,
+                tds: 220,
+                turbidity: 1.5,
+                cause: null,
+                lastUpdate: "6 min ago"
+            },
+            {
+                id: "AM-008",
+                location: [23.1850, 79.9860],
+                status: "safe",
+                score: 91,
+                tds: 155,
+                turbidity: 0.4,
+                cause: null,
+                lastUpdate: "4 min ago"
+            },
+
+            // CAUTION nodes (Orange)
+            {
+                id: "AM-009",
+                location: [23.1812, 79.9840],
+                status: "caution",
+                score: 68,
+                tds: 420,
+                turbidity: 2.8,
+                cause: "Elevated TDS",
+                lastUpdate: "1 min ago"
+            },
+            {
+                id: "AM-010",
+                location: [23.1795, 79.9858],
+                status: "caution",
+                score: 72,
+                tds: 380,
+                turbidity: 3.2,
+                cause: "Moderate Turbidity",
+                lastUpdate: "2 min ago"
+            },
+
+            // UNSAFE nodes (Red) - These form the contamination cluster
+            {
+                id: "AM-011",
+                location: [23.1818, 79.9820],
+                status: "unsafe",
+                score: 32,
+                tds: 580,
+                turbidity: 8.5,
+                cause: "Turbidity Spike",
+                lastUpdate: "30 sec ago"
+            },
+            {
+                id: "AM-012",
+                location: [23.1822, 79.9828],
+                status: "unsafe",
+                score: 28,
+                tds: 620,
+                turbidity: 9.2,
+                cause: "Turbidity Spike",
+                lastUpdate: "45 sec ago"
+            },
+            {
+                id: "AM-013",
+                location: [23.1826, 79.9815],
+                status: "unsafe",
+                score: 35,
+                tds: 550,
+                turbidity: 7.8,
+                cause: "Turbidity Spike",
+                lastUpdate: "1 min ago"
+            }
+        ];
+
+        // ========================================
+        // INITIALIZE MAP
+        // ========================================
+
+        // Create map with dark theme
+        const map = L.map('map', {
+            zoomControl: false
+        }).setView(CONFIG.center, CONFIG.zoom);
+
+        // Add dark map tiles (CartoDB Dark Matter)
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '© OpenStreetMap © CartoDB',
+            maxZoom: 19
+        }).addTo(map);
+
+        // Add zoom control to bottom right
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+        // ========================================
+        // MARKER STYLES
+        // ========================================
+
+        const markerStyles = {
+            device: {
+                radius: 12,
+                fillColor: '#00d4ff',
+                color: '#00d4ff',
+                weight: 3,
+                opacity: 1,
+                fillOpacity: 0.8
+            },
+            safe: {
+                radius: 8,
+                fillColor: '#00e676',
+                color: '#00e676',
+                weight: 2,
+                opacity: 0.8,
+                fillOpacity: 0.6
+            },
+            caution: {
+                radius: 8,
+                fillColor: '#ffab00',
+                color: '#ffab00',
+                weight: 2,
+                opacity: 0.8,
+                fillOpacity: 0.6
+            },
+            unsafe: {
+                radius: 10,
+                fillColor: '#ff5252',
+                color: '#ff5252',
+                weight: 2,
+                opacity: 0.9,
+                fillOpacity: 0.7
+            }
+        };
+
+        // ========================================
+        // ADD YOUR DEVICE (The Pulsing Cyan Dot)
+        // ========================================
+
+        // Main device marker
+        const deviceMarker = L.circleMarker(CONFIG.center, markerStyles.device).addTo(map);
+
+        // Pulse effect (animated ring)
+        function createPulseRing() {
+            const ring = L.circleMarker(CONFIG.center, {
+                radius: 12,
+                fillColor: 'transparent',
+                color: '#00d4ff',
+                weight: 2,
+                opacity: 0.8
+            }).addTo(map);
+
+            let size = 12;
+            let opacity = 0.8;
+
+            const animate = setInterval(() => {
+                size += 1;
+                opacity -= 0.03;
+
+                ring.setRadius(size);
+                ring.setStyle({ opacity: opacity });
+
+                if (opacity <= 0) {
+                    map.removeLayer(ring);
+                    clearInterval(animate);
+                }
+            }, 50);
+        }
+
+        // Start pulse animation loop
+        setInterval(createPulseRing, 2000);
+        createPulseRing();
+
+        // Device popup
+        deviceMarker.bindPopup(`
+            <div class="popup-title">📍 Your Device</div>
+            <div class="popup-status safe">ANALYZING</div>
+            <div class="popup-detail">
+                <strong>ID:</strong> ${CONFIG.deviceId}<br>
+                <strong>Status:</strong> Live Analysis<br>
+                <strong>Location:</strong> Dhanwantri Nagar
+            </div>
+        `);
+
+        // ========================================
+        // ADD GHOST NODES (Network Devices)
+        // ========================================
+
+        const markers = [];
+
+        ghostNodes.forEach(node => {
+            const style = markerStyles[node.status];
+            const marker = L.circleMarker(node.location, style).addTo(map);
+
+            const statusLabel = node.status.charAt(0).toUpperCase() + node.status.slice(1);
+
+            marker.bindPopup(`
+                <div class="popup-title">📱 Device ${node.id}</div>
+                <div class="popup-status ${node.status}">${statusLabel.toUpperCase()}</div>
+                <div class="popup-detail">
+                    <strong>Jal-Score:</strong> ${node.score}/100<br>
+                    <strong>TDS:</strong> ${node.tds} ppm<br>
+                    <strong>Turbidity:</strong> ${node.turbidity} NTU<br>
+                    ${node.cause ? `<strong>Issue:</strong> ${node.cause}<br>` : ''}
+                    <strong>Updated:</strong> ${node.lastUpdate}
+                </div>
+            `);
+
+            markers.push({ marker, node });
+        });
+
+        // ========================================
+        // CONTAMINATION CLUSTER DETECTION
+        // ========================================
+
+        // Find unsafe nodes
+        const unsafeNodes = ghostNodes.filter(n => n.status === 'unsafe');
+
+        if (unsafeNodes.length >= 2) {
+            // Create polygon connecting unsafe nodes (contamination zone)
+            const clusterCoords = unsafeNodes.map(n => n.location);
+
+            // Add a slight buffer to make polygon more visible
+            const polygon = L.polygon(clusterCoords, {
+                color: '#ff5252',
+                fillColor: '#ff5252',
+                fillOpacity: 0.2,
+                weight: 2,
+                dashArray: '5, 10'
+            }).addTo(map);
+
+            // Cluster popup
+            polygon.bindPopup(`
+                <div class="popup-cluster">
+                    <div class="popup-cluster-title">⚠️ Contamination Cluster Detected</div>
+                    <div class="popup-cluster-desc">
+                        <strong>${unsafeNodes.length} devices</strong> reporting high turbidity.<br>
+                        <strong>Probable cause:</strong> Pipe burst or sewage leak in Sector 4.<br>
+                        <strong>Recommendation:</strong> Alert municipal water department.
+                    </div>
+                </div>
+            `);
+
+            // Show alert banner
+            setTimeout(() => {
+                document.getElementById('alert-banner').classList.add('show');
+            }, 1500);
+        }
+
+        // ========================================
+        // UPDATE STATS
+        // ========================================
+
+        const stats = {
+            total: ghostNodes.length + 1,  // +1 for your device
+            safe: ghostNodes.filter(n => n.status === 'safe').length + 1,
+            caution: ghostNodes.filter(n => n.status === 'caution').length,
+            unsafe: ghostNodes.filter(n => n.status === 'unsafe').length
+        };
+
+        document.getElementById('stat-total').textContent = stats.total;
+        document.getElementById('stat-safe').textContent = stats.safe;
+        document.getElementById('stat-caution').textContent = stats.caution;
+        document.getElementById('stat-unsafe').textContent = stats.unsafe;
+
+        // ========================================
+        // SIMULATE REAL-TIME UPDATES (Demo Effect)
+        // ========================================
+
+        // Occasionally "update" a random node to show live activity
+        setInterval(() => {
+            const randomIdx = Math.floor(Math.random() * markers.length);
+            const { marker, node } = markers[randomIdx];
+
+            // Flash effect
+            const originalStyle = markerStyles[node.status];
+            marker.setStyle({ fillOpacity: 1, weight: 4 });
+
+            setTimeout(() => {
+                marker.setStyle(originalStyle);
+            }, 300);
+        }, 3000);
+
+        console.log('🗺️ Aqua-Mind Ghost Map initialized');
+        console.log(`📊 Network: ${stats.total} devices (${stats.safe} safe, ${stats.caution} caution, ${stats.unsafe} unsafe)`);
+    </script>
+</body>
+
+</html>
