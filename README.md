@@ -1,267 +1,201 @@
-<p align="center">
-  <img src="https://img.shields.io/badge/💧-Aqua--Mind-00d4ff?style=for-the-badge&labelColor=0a1628" alt="Aqua-Mind"/>
-</p>
+# 🌊 Aqua-Mind: Water Quality Intelligence
 
-<h1 align="center">Aqua-Mind</h1>
-<h3 align="center">Context-Aware Water Quality Intelligence</h3>
+**Lab-grade water testing for ₹1,500 using AI + Smart Sensors**
 
-<p align="center">
-  <strong>Jal Jeevan Mission Innovation Challenge | Portable Water Quality Devices Track</strong>
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/Python-3.9+-blue?style=flat-square&logo=python" alt="Python"/>
-  <img src="https://img.shields.io/badge/Raspberry_Pi-Zero_2_W-c51a4a?style=flat-square&logo=raspberrypi" alt="Raspberry Pi"/>
-  <img src="https://img.shields.io/badge/Gemini-AI_Powered-4285F4?style=flat-square&logo=google" alt="Gemini"/>
-  <img src="https://img.shields.io/badge/PWA-Offline_First-5A0FC8?style=flat-square" alt="PWA"/>
-  <img src="https://img.shields.io/badge/Cost-₹3,350-green?style=flat-square" alt="Cost"/>
-</p>
+Built for the Jal Jeevan Mission. Designed for every Indian village.
 
 ---
 
-## 🌊 The Problem
+## 📦 What You Need
 
-Lab tests are **accurate but slow**. Cheap sensors are **fast but lie**.
+| Item | Cost (approx) | Status |
+|------|---------------|--------|
+| ESP32 DevKit (30-pin) | ₹300 | ✅ Required |
+| TDS Sensor V1.0 | ₹200 | ✅ Required |
+| pH Sensor Module | ₹400 | ✅ Required |
+| Turbidity Sensor | ₹400 | ⏳ Coming soon |
+| Jumper wires | ₹50 | ✅ Required |
+| USB Cable (Micro-USB) | ₹50 | ✅ Required |
 
-## 💡 Our Solution
-
-**Aqua-Mind competes on Software Intelligence, not hardware precision.**
-
-We use a **5-Stage Trust Architecture** to validate cheap sensor data before showing it to users.
-
-**Tagline**: *"Lab-aligned confidence at ₹3,000"*
+**Total: ~₹1,400** (compared to ₹50,000 lab equipment!)
 
 ---
 
-## 🚀 Quick Start (No Hardware Needed!)
+## 🔌 Wiring Diagram
 
-```bash
-# Clone
-git clone https://github.com/EruditeCoder108/Aqua-mind.git
-cd Aqua-mind/pi
+Connect your sensors to ESP32 like this:
 
-# Test different water scenarios
-python main.py --scenario clean_water --single    # Good water
-python main.py --scenario tap_water --single      # Normal tap  
-python main.py --scenario dirty_water --single    # Bad water
-python main.py --scenario contaminated --single   # Unsafe
-python main.py --scenario sensor_error --single   # Broken sensor
+```
+ESP32 Pin    →    Sensor
+──────────────────────────────────────
+3.3V         →    pH Module VCC (red)
+GND          →    pH Module GND (black)
+GPIO 35      →    pH Module Signal (yellow/blue)
+
+VIN (5V)     →    TDS Module VCC (red)
+GND          →    TDS Module GND (black)
+GPIO 34      →    TDS Module Signal (yellow/A)
+──────────────────────────────────────
 ```
 
-### Test Mobile App
-1. Open `mobile-app/index.html` in Chrome
-2. Settings → Set Simulation Mode → "Tap Water"
-3. Click Connect → Watch the magic! ✨
-
-### Test Ghost Map
+### Visual Guide:
 ```
-Open: mobile-app/map.html
+        ESP32 Board
+    ┌─────────────────┐
+    │  [USB Port]     │
+    │                 │
+    │ 3V3 ─────→ pH VCC
+    │ GND ─────→ pH GND
+    │ G35 ─────→ pH Signal
+    │                 │
+    │ VIN ─────→ TDS VCC
+    │ GND ─────→ TDS GND
+    │ G34 ─────→ TDS Signal
+    │                 │
+    └─────────────────┘
 ```
 
 ---
 
-## 📖 How It Works (Simple Explanation)
+## 🛠️ Step-by-Step Setup Guide
 
-```
-CHEAP SENSOR (₹300)  →  SMART SOFTWARE (FREE)  →  RELIABLE RESULTS
-       ↓                        ↓                        ↓
-   "350 ppm"              "Is this real?"           "CAUTION ⚠️"
-   (might be wrong)       (5 trust checks)          (with confidence)
-```
+### Step 1: Download Arduino IDE
 
----
+1. Go to: https://www.arduino.cc/en/software
+2. Click **"Windows Win 10 and newer, 64 bits"**
+3. Download and install (click Next, Next, Install)
+4. Open Arduino IDE
 
-## 🐍 Part 1: Python Backend (The Brain)
+### Step 2: Add ESP32 Support to Arduino
 
-### `sensors.py` - The Eyes 👀
-Reads raw numbers from sensors. Has **SIMULATION MODE** for testing without hardware.
+1. In Arduino IDE, go to **File → Preferences**
+2. Find "Additional boards manager URLs" and paste:
+   ```
+   https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+   ```
+3. Click **OK**
+4. Go to **Tools → Board → Boards Manager**
+5. Search "ESP32"
+6. Click **Install** on "ESP32 by Espressif Systems"
+7. Wait for installation (takes 2-3 minutes)
 
-### `trust_engine.py` - The Detective 🔍
-The **HEART** of the project. Uses **5 tricks** to catch lying sensors:
+### Step 3: Select Your Board
 
-| Trick | What It Does |
-|-------|--------------|
-| **Tri-Check** | Take 3 readings, average them (not just 1) |
-| **Stability Score** | 0-100% reliability rating |
-| **Geo-Profile** | Different rules for Jabalpur vs Jaipur vs Chennai |
-| **Seasonal Awareness** | Monsoon = expect more sediment |
-| **Jal-Score** | Final 0-100 water quality score |
+1. Connect ESP32 to computer via USB cable
+2. Go to **Tools → Board → ESP32 Arduino**
+3. Select **"ESP32 Dev Module"**
+4. Go to **Tools → Port**
+5. Select the COM port (usually COM3, COM4, or similar)
 
-### `rules_engine.py` - The Offline Doctor 💊
-Gives safety advice **WITHOUT internet** (important for villages!)
+### Step 4: Upload the Code
 
-### `bluetooth_comm.py` - The Messenger 📡
-Sends results from Pi to your phone via Bluetooth.
+1. Open the file `aquamind_esp32.ino` in Arduino IDE
+2. Click the **Upload** button (→ arrow icon)
+3. **Important:** Hold the **BOOT** button on ESP32 when you see "Connecting..."
+4. Release when upload starts
+5. Wait for "Done uploading"
 
-### `profiles.json` - The Map 🗺️
-Stores settings for different cities (Dhanwantri Nagar, Jabalpur, Jaipur, Chennai, Delhi, Guwahati, Mumbai).
+### Step 5: Test It!
 
-### `main.py` - The Boss 👔
-Connects everything together.
-
----
-
-## 📱 Part 2: Mobile App (The Face)
-
-| File | What It Does |
-|------|--------------|
-| `index.html` | Main dashboard with Jal-Score |
-| `map.html` | 🗺️ **Ghost Map** - Network visualization |
-| `style.css` | Dark ocean theme |
-| `app.js` | Main app logic |
-| `bluetooth.js` | Connects to Raspberry Pi |
-| `gemini.js` | Talks to Google AI |
-| `sw.js` | Makes app work offline |
+1. Go to **Tools → Serial Monitor**
+2. Set baud rate to **115200** (bottom right)
+3. Press the **BOOT** button on ESP32
+4. Watch the water analysis run!
 
 ---
 
-## 🗺️ Ghost Map (Network Intelligence)
+## 📱 Connecting to Mobile App
 
-**The killer demo feature!** Shows how Aqua-Mind can scale to a city-wide network.
-
-### What You See:
-- 🔵 **Your Device** (Pulsing Cyan) - Live analysis
-- 🟢 **Safe Neighbors** - Score 80+
-- 🟠 **Caution Neighbors** - Score 50-80
-- 🔴 **Unsafe Nodes** - Score <50
-- 📍 **Red Polygon** - Contamination cluster detected!
-
-### Demo Script:
-> "My device is analyzing (Cyan). The system detected a **cluster of high turbidity** (Red Zone) - alerting the water department that a pipe has likely burst in Sector 4."
+1. Open the Aqua-Mind app on your phone
+2. Turn on Bluetooth
+3. Look for device named **"AquaMind-ESP32"**
+4. Tap to connect
+5. Tap "Analyze" to test water
 
 ---
 
-## 🤖 AI Integration (Gemini)
+## 🧪 How to Test Water
 
-Takes numbers → Explains in simple Hindi/English:
+1. **Dip sensors** in water sample
+2. **Press BOOT button** on ESP32 (or use app)
+3. **Wait 5 seconds** for analysis
+4. **Read result** on Serial Monitor or app
 
-**Input**: `TDS: 650, Turbidity: 3.2, Score: 58`
+### Understanding Results
 
-**Output**: 
-> "पानी में TDS ज़्यादा है (High minerals detected). Use RO filter recommended."
-
-### Get API Key:
-1. Visit [Google AI Studio](https://aistudio.google.com/apikey)
-2. Create new key
-3. Add in mobile app settings
+| Jal-Score | Verdict | What it means |
+|-----------|---------|---------------|
+| 80-100 | ✅ SAFE | Good to drink |
+| 60-79 | 👍 ACCEPTABLE | OK, could be better |
+| 40-59 | ⚠️ CAUTION | Filter before drinking |
+| 0-39 | 🚫 UNSAFE | Do not drink! |
 
 ---
 
-## 🔧 Hardware Setup
+## 🔧 Troubleshooting
 
-### Bill of Materials (~₹3,350)
+### "Upload Failed" Error
+- Hold BOOT button while uploading
+- Try a different USB cable
+- Check Tools → Port is selected
 
-| Component | Price (₹) |
-|-----------|-----------|
-| Raspberry Pi Zero 2 W | 1,500-1,800 |
-| MicroSD Card 16GB | 350 |
-| TDS Sensor | 350 |
-| Turbidity Sensor | 850 |
-| DS18B20 Temp Probe | 100 |
-| MCP3008 ADC | 150 |
-| Misc (resistors, wires) | 150 |
+### Sensor Reads 0
+- Check wiring connections
+- Make sure sensor is in water
+- Try swapping GPIO pins
 
-### Wiring
-```
-TDS Sensor ────▶ MCP3008 CH0
-Turbidity* ────▶ MCP3008 CH1  (* Use voltage divider!)
-DS18B20 ───────▶ GPIO 4
-Button ────────▶ GPIO 17
-```
-
-⚠️ **CRITICAL**: Turbidity outputs 4.5V - use voltage divider (2× 10kΩ) or damage Pi!
+### BLE Not Found
+- Restart ESP32 (press EN button)
+- Turn phone Bluetooth off and on
+- Try forgetting and re-pairing device
 
 ---
 
 ## 📁 Project Structure
 
 ```
-Aqua-mind/
-├── pi/                         # Raspberry Pi backend
-│   ├── main.py                 # The Boss
-│   ├── sensors.py              # The Eyes
-│   ├── trust_engine.py         # The Detective
-│   ├── rules_engine.py         # The Doctor
-│   ├── bluetooth_comm.py       # The Messenger
-│   ├── profiles.json           # The Map
-│   └── calibration.json        
-│
-└── mobile-app/                 # Progressive Web App
-    ├── index.html              # Dashboard
-    ├── map.html                # Ghost Map
-    ├── css/style.css
-    ├── js/app.js
-    ├── js/bluetooth.js
-    ├── js/gemini.js
-    ├── manifest.json
-    └── sw.js
+aqua-mind/
+├── aquamind_esp32.ino   # Main code for ESP32
+├── mobile-app/          # Android app source code
+├── README.md            # This file
+├── LICENSE              # MIT License
+└── IJRPR31819.pdf       # Research paper reference
 ```
 
 ---
 
-## 🌍 Regional Profiles
+## 🎯 What the Code Does
 
-| Region | Primary Concern | Focus |
-|--------|-----------------|-------|
-| **Dhanwantri Nagar, Jabalpur** | Narmada sediment | Turbidity 55% |
-| **Jabalpur City** | Monsoon sediment | Turbidity 60% |
-| **Jaipur** | High TDS/Arsenic | TDS 70% |
-| **Chennai** | Coastal salinity | TDS 60% |
-| **Delhi** | Organic pollution | Turbidity 50% |
-| **Guwahati** | Floods | Turbidity 70% |
-| **Mumbai** | Industrial | TDS 50% |
+1. **Reads TDS** (Total Dissolved Solids) - Measures minerals in water
+2. **Reads pH** - Measures acidity/alkalinity (7 = neutral)
+3. **Tri-Check** - Takes 15 readings to ensure accuracy
+4. **Calculates Jal-Score** - Combines all readings into 0-100 score
+5. **Sends via Bluetooth** - Displays result on your phone
 
 ---
 
-## 🎬 Demo Script (2 Minutes)
+## ⚡ Quick Reference
 
-**[0:00-0:30] THE HOOK**
-> "Lab tests are accurate but slow. Cheap sensors are fast but lie. Aqua-Mind is the only low-cost device that knows when it's wrong."
-
-**[0:30-1:00] THE DEMO**
-> "Watch. I dip it in dirty water. It runs a 3-burst statistical check, not just one reading."
-
-**[1:00-1:30] THE AI + MAP**
-> "My phone shows Gemini saying: 'पानी गंदा है'. And the Ghost Map shows a contamination cluster in Sector 4!"
-
-**[1:30-2:00] CLOSING**
-> "Lab-aligned confidence at ₹3,000. This is how we solve trust in the Jal Jeevan Mission."
+| Action | How to do it |
+|--------|--------------|
+| Upload code | Click → button, hold BOOT on ESP32 |
+| Test water | Press BOOT button on ESP32 |
+| View results | Serial Monitor at 115200 baud |
+| Connect phone | Bluetooth → AquaMind-ESP32 |
 
 ---
 
-## ✅ What's Done
+## 🤝 Credits
 
-- [x] Core Python backend with simulation
-- [x] 5-Pillar Trust System (Tri-Check, Stability, Geo-Profile, Rules, AI)
-- [x] Mobile PWA with Gemini AI
-- [x] Ghost Map network visualization
-- [x] 7 Regional profiles (research-backed)
-- [x] Offline-first architecture
-
-## 🔜 Coming Next
-
-- [ ] Hardware integration testing
-- [ ] Real sensor calibration  
-- [ ] Data export (CSV/PDF)
-- [ ] Multi-language UI
+- **Author:** Sambhav Jain
+- **Project:** Jal Jeevan Mission Innovation Challenge
+- **Location:** Dhanwantri Nagar, Jabalpur, MP
+- **License:** MIT (Open Source)
 
 ---
 
-## 📜 Standards & Research
+## 📞 Need Help?
 
-- **BIS IS:10500:2012** - Indian Drinking Water Standard
-- **WHO Guidelines** for Drinking Water Quality
-- **Research**: IJRPR31819 - Analysis of Drinking Water in Jabalpur City (2024)
-
----
-
-## 📄 License
-
-MIT License - Open Source
-
----
-
-<p align="center">
-  <strong>🌊 Clean Water for All | जल जीवन मिशन 🇮🇳</strong><br>
-  <em>"Lab-aligned confidence at ₹3,000"</em>
-</p>
+- Check the Troubleshooting section above
+- Open an issue on GitHub
+- Email: eruditecoder108@gmail.com

@@ -6,15 +6,17 @@
  */
 
 class BluetoothManager {
-    // UUIDs for Serial Port Profile (SPP)
-    static SERVICE_UUID = '00001101-0000-1000-8000-00805f9b34fb';
-    static CHARACTERISTIC_UUID = '00001101-0000-1000-8000-00805f9b34fb';
+    // UUIDs must match ESP32 code exactly
+    static SERVICE_UUID = '12345678-1234-1234-1234-123456789abc';
+    static CHAR_DATA_UUID = '12345678-1234-1234-1234-123456789abd';
+    static CHAR_COMMAND_UUID = '12345678-1234-1234-1234-123456789abe';
 
     constructor() {
         this.device = null;
         this.server = null;
         this.service = null;
-        this.characteristic = null;
+        this.dataChar = null;
+        this.commandChar = null;
         this.connected = false;
         this.onDataReceived = null;
         this.onConnectionChange = null;
@@ -28,23 +30,8 @@ class BluetoothManager {
         }
     }
 
-    /**
-     * Check if Web Bluetooth is available
-     */
-    isSupported() {
-        return this.supported;
-    }
+    // ... (keep matches)
 
-    /**
-     * Check if connected
-     */
-    isConnected() {
-        return this.connected && this.device?.gatt?.connected;
-    }
-
-    /**
-     * Connect to Aqua-Mind device
-     */
     async connect() {
         if (!this.supported) {
             throw new Error('Web Bluetooth not supported');
@@ -53,40 +40,39 @@ class BluetoothManager {
         try {
             console.log('🔍 Scanning for Aqua-Mind device...');
 
-            // Request device with name filter
+            // Request device with name filter and optional service
             this.device = await navigator.bluetooth.requestDevice({
                 filters: [
-                    { namePrefix: 'AquaMind' },
-                    { namePrefix: 'raspberrypi' },
-                    { namePrefix: 'AQUA' }
+                    { name: 'AquaMind-ESP32' },
+                    { namePrefix: 'Aqua' },
+                    { namePrefix: 'ESP32' }
                 ],
                 optionalServices: [BluetoothManager.SERVICE_UUID]
             });
 
             console.log(`📱 Device found: ${this.device.name}`);
 
-            // Listen for disconnection
             this.device.addEventListener('gattserverdisconnected', () => {
                 this._handleDisconnect();
             });
 
-            // Connect to GATT server
             console.log('🔗 Connecting to GATT server...');
             this.server = await this.device.gatt.connect();
 
-            // Get service
             console.log('📡 Getting service...');
             this.service = await this.server.getPrimaryService(BluetoothManager.SERVICE_UUID);
 
-            // Get characteristic
-            console.log('📝 Getting characteristic...');
-            this.characteristic = await this.service.getCharacteristic(
-                BluetoothManager.CHARACTERISTIC_UUID
-            );
+            // Get Data Characteristic (Notify)
+            console.log('📝 Getting data characteristic...');
+            this.dataChar = await this.service.getCharacteristic(BluetoothManager.CHAR_DATA_UUID);
+
+            // Get Command Characteristic (Write)
+            console.log('📝 Getting command characteristic...');
+            this.commandChar = await this.service.getCharacteristic(BluetoothManager.CHAR_COMMAND_UUID);
 
             // Start notifications
-            await this.characteristic.startNotifications();
-            this.characteristic.addEventListener('characteristicvaluechanged',
+            await this.dataChar.startNotifications();
+            this.dataChar.addEventListener('characteristicvaluechanged',
                 (event) => this._handleData(event));
 
             this.connected = true;
@@ -100,87 +86,50 @@ class BluetoothManager {
         } catch (error) {
             console.error('❌ Bluetooth connection failed:', error);
             this.connected = false;
-
-            if (this.onConnectionChange) {
-                this.onConnectionChange(false);
-            }
-
+            if (this.onConnectionChange) this.onConnectionChange(false);
             throw error;
         }
     }
 
-    /**
-     * Disconnect from device
-     */
-    disconnect() {
-        if (this.device?.gatt?.connected) {
-            this.device.gatt.disconnect();
-        }
-        this._handleDisconnect();
-    }
-
-    /**
-     * Handle disconnection
-     */
     _handleDisconnect() {
         console.log('📴 Bluetooth disconnected');
         this.connected = false;
         this.server = null;
         this.service = null;
-        this.characteristic = null;
+        this.dataChar = null;
+        this.commandChar = null;
 
         if (this.onConnectionChange) {
             this.onConnectionChange(false);
         }
     }
 
-    /**
-     * Handle incoming data
-     */
-    _handleData(event) {
-        const value = event.target.value;
-        const decoder = new TextDecoder('utf-8');
-        const text = decoder.decode(value);
+    // ... (keep matches)
 
-        // Buffer data until we get a complete JSON line
-        this.buffer += text;
-
-        // Check for complete messages (newline-terminated JSON)
-        const lines = this.buffer.split('\n');
-
-        for (let i = 0; i < lines.length - 1; i++) {
-            const line = lines[i].trim();
-            if (line) {
-                try {
-                    const data = JSON.parse(line);
-                    console.log('📥 Received data:', data);
-
-                    if (this.onDataReceived) {
-                        this.onDataReceived(data);
-                    }
-                } catch (e) {
-                    console.warn('Invalid JSON received:', line);
-                }
-            }
-        }
-
-        // Keep the last incomplete line in buffer
-        this.buffer = lines[lines.length - 1];
-    }
-
-    /**
-     * Send command to device
-     */
     async send(command) {
-        if (!this.isConnected() || !this.characteristic) {
+        if (!this.isConnected() || !this.commandChar) {
             throw new Error('Not connected');
         }
 
-        const encoder = new TextEncoder();
-        const data = encoder.encode(JSON.stringify(command) + '\n');
+        // ESP32 expects raw string commands like "ANALYZE" for simple logic
+        // But invalid commands might be ignored. Let's send what the ESP32 expects.
+        // The Arduino code looks for "ANALYZE" or "STATUS" strings.
+        // If the inputs are JSON objects (like {type: 'REQUEST_READING'}), we should convert logic.
 
-        await this.characteristic.writeValue(data);
-        console.log('📤 Sent command:', command);
+        let textToSend = '';
+        if (typeof command === 'object' && command.type === 'REQUEST_READING') {
+            textToSend = 'ANALYZE';
+        } else if (typeof command === 'string') {
+            textToSend = command;
+        } else {
+            textToSend = JSON.stringify(command);
+        }
+
+        const encoder = new TextEncoder();
+        const data = encoder.encode(textToSend);
+
+        await this.commandChar.writeValue(data);
+        console.log('📤 Sent command:', textToSend);
     }
 
     /**
