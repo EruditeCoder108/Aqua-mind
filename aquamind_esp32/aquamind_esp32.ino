@@ -105,6 +105,11 @@ String lastVerdict = "UNKNOWN";
 // Analysis counter
 int analysisCount = 0;
 
+// Forward declarations (required for C++ compilation order)
+void analyzeWater();
+void sendStatus();
+void sendAnalysisViaBLE();
+
 // ============================================
 // BLE SERVER CALLBACKS
 // ============================================
@@ -300,9 +305,11 @@ int calculateJalScore(float tds, float ph, float turbidity, float stability) {
         float distFrom7 = abs(ph - 7.0);
         phScore = 100.0 - (distFrom7 * 20.0);  // Lose 20 points per unit from 7
     } else if (ph < PH_SAFE_MIN) {
-        phScore = max(0.0f, 50.0f - (PH_SAFE_MIN - ph) * 30.0f);
+        float penalty = ((float)PH_SAFE_MIN - ph) * 30.0f;
+        phScore = (penalty > 50.0f) ? 0.0f : (50.0f - penalty);
     } else {
-        phScore = max(0.0f, 50.0f - (ph - PH_SAFE_MAX) * 30.0f);
+        float penalty = (ph - (float)PH_SAFE_MAX) * 30.0f;
+        phScore = (penalty > 50.0f) ? 0.0f : (50.0f - penalty);
     }
     
     // Turbidity Score (0-100, lower is better)
