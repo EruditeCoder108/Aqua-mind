@@ -614,11 +614,19 @@ class AquaMindApp {
     }
 
     _applySettingsToUI() {
-        this.elements.settingProfile.value = this.settings.profile;
-        this.elements.settingApiKey.value = this.settings.apiKey;
-        this.elements.settingAutoAi.checked = this.settings.autoAi;
-        this.elements.settingNotifications.checked = this.settings.notifications;
-        this.elements.settingSimulation.value = this.settings.simulation || '';
+        // Profile is now auto-detected by ESP32, no manual selector
+        if (this.elements.settingApiKey) {
+            this.elements.settingApiKey.value = this.settings.apiKey || '';
+        }
+        if (this.elements.settingAutoAi) {
+            this.elements.settingAutoAi.checked = this.settings.autoAi;
+        }
+        if (this.elements.settingNotifications) {
+            this.elements.settingNotifications.checked = this.settings.notifications;
+        }
+        if (this.elements.settingSimulation) {
+            this.elements.settingSimulation.value = this.settings.simulation || '';
+        }
     }
 
     _openSettings() {
