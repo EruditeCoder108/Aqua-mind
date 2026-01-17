@@ -311,16 +311,22 @@ class AquaMindApp {
                     temp: data.temperature ?? data.temp ?? 25,
                     stability: data.stability ?? 0,
                     message: this._getVerdictMessage(data.verdict),
+                    // Enhanced profile data (from v2.1 firmware)
                     profile: data.profile || 'Jabalpur',
+                    city: data.city || data.profile || 'Unknown',
+                    season: data.season || 'normal',
+                    ambientTemp: data.ambient_temp ?? 28,
                     alert: data.alert || ''
                 };
 
                 console.log('📊 Normalized data:', normalizedData);
 
-                // Update location display in settings
+                // Update location display in settings (enhanced with city + season)
                 const locationEl = document.getElementById('detected-location');
                 if (locationEl) {
-                    locationEl.textContent = `📍 ${normalizedData.profile} (Auto-detected)`;
+                    const seasonEmoji = { monsoon: '🌧️', summer: '☀️', winter: '❄️', normal: '🍂' };
+                    const emoji = seasonEmoji[normalizedData.season] || '📍';
+                    locationEl.textContent = `${emoji} ${normalizedData.city} • ${normalizedData.season.charAt(0).toUpperCase() + normalizedData.season.slice(1)}`;
                 }
 
                 this.currentData = normalizedData;

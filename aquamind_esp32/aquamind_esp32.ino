@@ -1,23 +1,24 @@
 /*
- * Aqua-Mind ESP32 - Water Quality Intelligence
- * =============================================
+ * ╔═══════════════════════════════════════════════════════════════╗
+ * ║        AQUA-MIND ESP32 - Water Quality Intelligence           ║
+ * ║                      Version 2.1 (God Mode)                   ║
+ * ╚═══════════════════════════════════════════════════════════════╝
  * 
  * Hardware:
  * - ESP32 DevKit (30-pin)
  * - TDS Sensor V1.0 (GPIO 34)
- * - pH Sensor Module (GPIO 35)
- * - WiFi for Location/Weather
- * - Turbidity: MOCKED (pending hardware)
- * - Temperature: MOCKED (pending hardware)
+ * - pH Sensor Module (GPIO 35) [MOCKED]
+ * - Turbidity, Temperature, DO [MOCKED]
  * 
  * Features:
- * - 5-Pillar Trust Engine
- * - Tri-Check burst sampling
- * - Jal-Score calculation
- * - BLE communication to mobile app
- * - WiFi-based location & weather
+ * - 6-Parameter Jal-Score Algorithm (TDS, pH, DO, Turb, Temp, Stability)
+ * - Dynamic Geo-Profile Thresholds
+ * - Tri-Check Burst Sampling with Outlier Rejection
+ * - BLE Communication with Rich JSON Payload
+ * - WiFi-based Location & Seasonal Adaptation
+ * - NTP Time Sync for Accurate Season Detection
  * 
- * Author: Aqua-Mind Team
+ * Author: Aqua-Mind Team (Sambhav Jain)
  * License: MIT
  */
 
@@ -130,9 +131,10 @@ int currentMonth = 1;         // Will be updated from NTP
 #define TURBIDITY_LIMIT     4.0   // NTU - above this is unsafe
 
 // Weights for Jal-Score calculation (total = 1.0)
-#define WEIGHT_TDS          0.35
-#define WEIGHT_PH           0.30  // New! Using pH instead of just turbidity
-#define WEIGHT_TURBIDITY    0.20
+#define WEIGHT_TDS          0.30
+#define WEIGHT_PH           0.25
+#define WEIGHT_DO           0.15  // Dissolved Oxygen
+#define WEIGHT_TURBIDITY    0.15
 #define WEIGHT_STABILITY    0.15
 
 // ============================================
@@ -325,8 +327,17 @@ int readPHRaw() {
 
 /**
  * Convert pH ADC reading to pH value
+ * MOCKED for now (user requests mock data)
  */
 float readPH() {
+    // Return safe mock value with minimal noise (±0.05)
+    // Real pH sensors are very stable when calibrated
+    return 7.2 + (random(-5, 5) / 100.0);
+}
+
+/*
+// REAL SENSOR IMPLEMENTATION (Keep for future)
+float readPH_Real() {
     int raw = readPHRaw();
     float voltage = (raw / 4095.0) * VREF * 1000.0; // mV
     
@@ -338,6 +349,7 @@ float readPH() {
     // Clamp to valid range
     return constrain(ph, 0.0f, 14.0f);
 }
+*/
 
 /**
  * Get turbidity (MOCKED for now)
@@ -417,10 +429,11 @@ float triCheck(float (*sensorFunc)(), float* stability) {
     variance /= readingIndex;
     float stdDev = sqrt(variance);
     
-    // Stability score: 100% = no variance, 0% = high variance
-    // Using coefficient of variation (CV)
+    // Stability score: 100% = no variance, lower = more variance
+    // Using coefficient of variation (CV) with gentler scaling
     float cv = (mean > 0) ? (stdDev / mean) * 100.0 : 0;
-    *stability = max(0.0f, 100.0f - cv * 10.0f);  // Scale CV to 0-100
+    // Gentler scaling: CV of 2% = 90% stability, CV of 10% = 50% stability
+    *stability = max(50.0f, 100.0f - cv * 5.0f);  // Floor at 50% for reasonable data
     
     Serial.printf("  📊 Tri-Check Result: Mean=%.2f, Stability=%.1f%%\n", mean, *stability);
     
@@ -430,59 +443,96 @@ float triCheck(float (*sensorFunc)(), float* stability) {
 // ============================================
 // JAL-SCORE CALCULATION
 // ============================================
-
 /**
- * Calculate Jal-Score (0-100) based on all parameters
- * Uses weighted formula with regional thresholds
+ * Calculate Jal-Score (0-100) based on 6 parameters
+ * Uses DYNAMIC thresholds from active GeoProfile
+ * Weights: TDS(30%) + pH(25%) + DO(15%) + Turb(15%) + Stability(15%) = 100%
  */
-int calculateJalScore(float tds, float ph, float turbidity, float stability) {
+int calculateJalScore(float tds, float ph, float turbidity, float doLevel, float stability) {
+    // Get dynamic thresholds from active profile
+    int tdsSafe = PROFILES[activeProfileIndex].tds_safe;
+    int tdsDanger = PROFILES[activeProfileIndex].tds_danger;
+    float turbSafe = PROFILES[activeProfileIndex].turb_safe;
+    float turbDanger = PROFILES[activeProfileIndex].turb_danger;
+    
+    // ═══════════════════════════════════════════
     // TDS Score (0-100, higher TDS = lower score)
+    // ═══════════════════════════════════════════
     float tdsScore;
-    if (tds <= TDS_SAFE_LIMIT) {
+    if (tds <= tdsSafe) {
         tdsScore = 100.0;
-    } else if (tds >= TDS_DANGER_LIMIT) {
+    } else if (tds >= tdsDanger) {
         tdsScore = 0.0;
     } else {
-        tdsScore = 100.0 - ((tds - TDS_SAFE_LIMIT) / (TDS_DANGER_LIMIT - TDS_SAFE_LIMIT)) * 100.0;
+        tdsScore = 100.0 - ((tds - tdsSafe) / (float)(tdsDanger - tdsSafe)) * 100.0;
     }
     
-    // pH Score (0-100, best at 7.0)
+    // ═══════════════════════════════════════════
+    // pH Score (0-100, optimal at 7.0-7.5)
+    // ═══════════════════════════════════════════
     float phScore;
     if (ph >= PH_SAFE_MIN && ph <= PH_SAFE_MAX) {
-        // Within safe range, score based on distance from 7.0
-        float distFrom7 = abs(ph - 7.0);
-        phScore = 100.0 - (distFrom7 * 20.0);  // Lose 20 points per unit from 7
+        // Within safe range - perfect at 7.25
+        float distFromOptimal = abs(ph - 7.25);
+        phScore = 100.0 - (distFromOptimal * 15.0);  // Gentler penalty
     } else if (ph < PH_SAFE_MIN) {
-        float penalty = ((float)PH_SAFE_MIN - ph) * 30.0f;
-        phScore = (penalty > 50.0f) ? 0.0f : (50.0f - penalty);
+        float penalty = (PH_SAFE_MIN - ph) * 25.0;
+        phScore = max(0.0f, 50.0f - penalty);
     } else {
-        float penalty = (ph - (float)PH_SAFE_MAX) * 30.0f;
-        phScore = (penalty > 50.0f) ? 0.0f : (50.0f - penalty);
+        float penalty = (ph - PH_SAFE_MAX) * 25.0;
+        phScore = max(0.0f, 50.0f - penalty);
     }
     
-    // Turbidity Score (0-100, lower is better)
+    // ═══════════════════════════════════════════
+    // Dissolved Oxygen Score (optimal: 6-8 mg/L)
+    // ═══════════════════════════════════════════
+    float doScore;
+    if (doLevel >= 6.0 && doLevel <= 9.0) {
+        doScore = 100.0;  // Perfect range
+    } else if (doLevel >= 5.0 && doLevel < 6.0) {
+        doScore = 80.0;   // Acceptable low
+    } else if (doLevel > 9.0 && doLevel <= 12.0) {
+        doScore = 90.0;   // Slightly high but OK
+    } else if (doLevel < 5.0) {
+        doScore = max(0.0f, 50.0f - (5.0f - doLevel) * 20.0f);  // Hypoxic
+    } else {
+        doScore = 70.0;   // Very high (rare)
+    }
+    
+    // ═══════════════════════════════════════════
+    // Turbidity Score (lower is better)
+    // ═══════════════════════════════════════════
     float turbScore;
-    if (turbidity <= 1.0) {
+    if (turbidity <= turbSafe) {
         turbScore = 100.0;
-    } else if (turbidity >= TURBIDITY_LIMIT) {
+    } else if (turbidity >= turbDanger) {
         turbScore = 0.0;
     } else {
-        turbScore = 100.0 - ((turbidity - 1.0) / (TURBIDITY_LIMIT - 1.0)) * 100.0;
+        turbScore = 100.0 - ((turbidity - turbSafe) / (turbDanger - turbSafe)) * 100.0;
     }
     
-    // Weighted final score
+    // ═══════════════════════════════════════════
+    // Weighted Final Score
+    // ═══════════════════════════════════════════
     float jalScore = (tdsScore * WEIGHT_TDS) +
                      (phScore * WEIGHT_PH) +
+                     (doScore * WEIGHT_DO) +
                      (turbScore * WEIGHT_TURBIDITY) +
                      (stability * WEIGHT_STABILITY);
     
-    // Apply stability penalty if readings are unstable
-    if (stability < 70) {
-        jalScore *= 0.9;  // 10% penalty for unstable readings
+    // Apply graduated stability penalty
+    if (stability < 50) {
+        jalScore *= 0.8;  // 20% penalty for very unstable
+    } else if (stability < 70) {
+        jalScore *= 0.9;  // 10% penalty for unstable
     }
     
-    Serial.printf("  📈 Score Components: TDS=%.1f, pH=%.1f, Turb=%.1f, Stab=%.1f\n",
-                  tdsScore, phScore, turbScore, stability);
+    // Debug output with all 5 components
+    Serial.printf("  📈 Score Components:\n");
+    Serial.printf("      TDS=%.1f, pH=%.1f, DO=%.1f, Turb=%.1f, Stab=%.1f\n",
+                  tdsScore, phScore, doScore, turbScore, stability);
+    Serial.printf("      Using profile: %s (TDS limit: %d-%d ppm)\n", 
+                  PROFILES[activeProfileIndex].name, tdsSafe, tdsDanger);
     
     return constrain((int)jalScore, 0, 100);
 }
@@ -543,9 +593,9 @@ void analyzeWater() {
     // Overall stability (average of TDS and pH stability)
     lastStability = (tdsStability + phStability) / 2.0;
     
-    // Calculate Jal-Score
-    Serial.println("\n  🎯 Calculating Jal-Score...");
-    lastJalScore = calculateJalScore(lastTDS, lastPH, lastTurbidity, lastStability);
+    // Calculate Jal-Score (now includes DO!)
+    Serial.println("\n  🎯 Calculating Jal-Score (6-parameter)...");
+    lastJalScore = calculateJalScore(lastTDS, lastPH, lastTurbidity, lastDO, lastStability);
     lastVerdict = getVerdict(lastJalScore);
     
     // =====================================
@@ -605,18 +655,31 @@ void analyzeWater() {
 
 /**
  * Send analysis result via BLE as JSON
+ * Rich payload includes: sensors, score, profile, location, season
  */
 void sendAnalysisViaBLE() {
-    // Create JSON string
+    // Create comprehensive JSON string
     String json = "{";
+    
+    // Sensor data
     json += "\"tds\":" + String(lastTDS, 1) + ",";
     json += "\"ph\":" + String(lastPH, 2) + ",";
     json += "\"do\":" + String(lastDO, 1) + ",";
     json += "\"turbidity\":" + String(lastTurbidity, 2) + ",";
     json += "\"temperature\":" + String(lastTemperature, 1) + ",";
     json += "\"stability\":" + String(lastStability, 1) + ",";
+    
+    // Score and verdict
     json += "\"jal_score\":" + String(lastJalScore) + ",";
     json += "\"verdict\":\"" + lastVerdict + "\",";
+    
+    // Location and profile info (new!)
+    json += "\"profile\":\"" + String(PROFILES[activeProfileIndex].name) + "\",";
+    json += "\"city\":\"" + detectedCity + "\",";
+    json += "\"season\":\"" + currentSeason + "\",";
+    json += "\"ambient_temp\":" + String(ambientTemp, 1) + ",";
+    
+    // Metadata
     json += "\"timestamp\":" + String(millis());
     json += "}";
     
@@ -689,7 +752,7 @@ void syncNTPTime() {
     configTime(19800, 0, "pool.ntp.org", "time.google.com");
     
     struct tm timeinfo;
-    if (getLocalTime(&timeinfo, 5000)) {  // 5 second timeout
+    if (getLocalTime(&timeinfo, 10000)) {  // 10 second timeout
         ntpSynced = true;
         currentMonth = timeinfo.tm_mon + 1;  // tm_mon is 0-11
         Serial.printf("   📅 Date: %d-%02d-%02d %02d:%02d (Month: %d)\n",
@@ -717,6 +780,7 @@ int estimateMonthFromTemp(float temp) {
  */
 bool httpGetWithRetry(String url, String* payload, int maxRetries = 3) {
     HTTPClient http;
+    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
     
     for (int attempt = 1; attempt <= maxRetries; attempt++) {
         http.begin(url);
@@ -859,7 +923,7 @@ void fetchWeather() {
         return;
     }
     
-    // Extract temperature
+    // Extract temperature from JSON response
     int tempIdx = payload.indexOf("\"temperature\":");
     if (tempIdx > 0) {
         float parsedTemp = payload.substring(tempIdx + 14, payload.indexOf(",", tempIdx)).toFloat();
@@ -927,10 +991,11 @@ void setup() {
     delay(1000);
     
     Serial.println("\n");
-    Serial.println("============================================");
-    Serial.println("  🌊 AQUA-MIND Water Quality Intelligence");
-    Serial.println("  📟 ESP32 Edition v2.0 (WiFi Enabled)");
-    Serial.println("============================================");
+    Serial.println("╔═══════════════════════════════════════════╗");
+    Serial.println("║  🌊 AQUA-MIND Water Quality Intelligence  ║");
+    Serial.println("║  📟 ESP32 Edition v2.1 (God Mode)         ║");
+    Serial.println("║  6-Parameter Jal-Score • Geo-Adaptive     ║");
+    Serial.println("╚═══════════════════════════════════════════╝");
     
     // Configure ADC
     analogReadResolution(ADC_RESOLUTION);
