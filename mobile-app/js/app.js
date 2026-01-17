@@ -316,6 +316,12 @@ class AquaMindApp {
 
                 console.log('📊 Normalized data:', normalizedData);
 
+                // Update location display in settings
+                const locationEl = document.getElementById('detected-location');
+                if (locationEl) {
+                    locationEl.textContent = `📍 ${normalizedData.profile} (Auto-detected)`;
+                }
+
                 this.currentData = normalizedData;
                 this._updateDisplay(normalizedData);
                 this._addToHistory(normalizedData);
