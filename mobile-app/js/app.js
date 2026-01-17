@@ -305,10 +305,11 @@ class AquaMindApp {
                     score: data.jal_score ?? data.score ?? 0,
                     verdict: data.verdict || 'UNKNOWN',
                     tds: data.tds ?? 0,
+                    ph: data.ph ?? 7,
+                    do: data.do ?? data.dissolved_oxygen ?? 7,  // Dissolved Oxygen (mg/L)
                     turb: data.turbidity ?? data.turb ?? 0,
                     temp: data.temperature ?? data.temp ?? 25,
                     stability: data.stability ?? 0,
-                    ph: data.ph ?? 7,
                     message: this._getVerdictMessage(data.verdict),
                     profile: data.profile || 'Jabalpur',
                     alert: data.alert || ''
@@ -387,6 +388,8 @@ class AquaMindApp {
 
             // Update readings - direct DOM access for reliability
             this._safeUpdateReading('reading-tds', 'bar-tds', data.tds, 1000, 'ppm', 1);
+            this._safeUpdateReading('reading-ph', 'bar-ph', data.ph, 14, '', 2);  // pH scale 0-14
+            this._safeUpdateReading('reading-do', 'bar-do', data.do, 15, 'mg/L', 1);  // DO typical 0-15 mg/L
             this._safeUpdateReading('reading-turb', 'bar-turb', data.turb, 20, 'NTU', 2);
             this._safeUpdateReading('reading-temp', 'bar-temp', data.temp, 50, '°C', 1);
             this._safeUpdateReading('reading-stability', 'bar-stability', data.stability, 100, '%', 1);
@@ -645,7 +648,7 @@ class AquaMindApp {
 
     _saveSettings() {
         // Collect settings
-        this.settings.profile = this.elements.settingProfile.value;
+        // Profile is auto-detected
         this.settings.apiKey = this.elements.settingApiKey.value;
         this.settings.autoAi = this.elements.settingAutoAi.checked;
         this.settings.notifications = this.elements.settingNotifications.checked;

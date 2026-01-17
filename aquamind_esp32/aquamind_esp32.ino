@@ -28,16 +28,22 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <Preferences.h>  // For saving WiFi credentials
+#include <time.h>         // For NTP time sync
 // Using simple String-based JSON parsing (no ArduinoJson needed)
 
 // ============================================
 // WIFI CONFIGURATION
 // ============================================
-// Default WiFi Credentials (can be changed via BLE)
-String wifiSSID = "Airtel_Sam";
-String wifiPassword = "Samj@777";
+// Default WiFi Credentials (hardcoded fallback)
+const char* DEFAULT_WIFI_SSID = "Airtel_Sam";
+const char* DEFAULT_WIFI_PASS = "Samj@777";
+
+// Active WiFi credentials (can be updated via BLE)
+String wifiSSID = DEFAULT_WIFI_SSID;
+String wifiPassword = DEFAULT_WIFI_PASS;
 
 bool wifiConnected = false;
+bool ntpSynced = false;
 Preferences preferences;  // For persistent storage
 
 // ============================================
@@ -69,9 +75,12 @@ int activeProfileIndex = 0;  // Default: Jabalpur
 String detectedCity = "Unknown";
 float detectedLat = 0;
 float detectedLon = 0;
+
+// Weather data (from API, for season detection)
 String currentSeason = "normal";
-float currentWeatherTemp = 25.0;
+float ambientTemp = 28.0;     // Default ambient temp (India average)
 bool isRaining = false;
+int currentMonth = 1;         // Will be updated from NTP
 
 // ============================================
 // PIN DEFINITIONS
@@ -101,6 +110,7 @@ bool isRaining = false;
 // These will be replaced when you get actual sensors
 #define MOCK_TURBIDITY_NTU      2.5   // Simulated turbidity
 #define MOCK_TEMPERATURE_C      25.0  // Simulated temperature
+#define MOCK_DO_MGL             7.5   // Simulated dissolved oxygen (mg/L)
 
 // ============================================
 // TRI-CHECK CONFIGURATION
@@ -145,6 +155,7 @@ bool oldDeviceConnected = false;
 // Sensor readings
 float lastTDS = 0;
 float lastPH = 0;
+float lastDO = MOCK_DO_MGL;  // Dissolved Oxygen (mg/L)
 float lastTurbidity = MOCK_TURBIDITY_NTU;
 float lastTemperature = MOCK_TEMPERATURE_C;
 float lastStability = 0;
@@ -158,6 +169,16 @@ int analysisCount = 0;
 void analyzeWater();
 void sendStatus();
 void sendAnalysisViaBLE();
+void handleWiFiCommand(String cmd);
+void connectWiFi();
+void fetchLocation();
+void fetchWeather();
+void syncNTPTime();
+void detectSeason();
+void loadSavedWiFi();
+int estimateMonthFromTemp(float temp);
+bool httpGetWithRetry(String url, String* payload, int maxRetries);
+float readDO();
 
 // ============================================
 // BLE SERVER CALLBACKS
@@ -336,6 +357,16 @@ float readTemperature() {
     return MOCK_TEMPERATURE_C + (random(-10, 10) / 10.0);
 }
 
+/**
+ * Get dissolved oxygen (MOCKED for now)
+ * Normal range: 5-9 mg/L for healthy water
+ */
+float readDO() {
+    // TODO: Replace with actual DO sensor reading when available
+    // Add some random noise
+    return MOCK_DO_MGL + (random(-10, 10) / 10.0);
+}
+
 // ============================================
 // TRI-CHECK BURST SAMPLING
 // ============================================
@@ -505,6 +536,10 @@ void analyzeWater() {
     lastTurbidity = readTurbidity();
     Serial.printf("\n  💧 Turbidity: %.2f NTU (mocked)\n", lastTurbidity);
     
+    // Dissolved Oxygen (mocked)
+    lastDO = readDO();
+    Serial.printf("  🫧 Dissolved O₂: %.1f mg/L (mocked)\n", lastDO);
+    
     // Overall stability (average of TDS and pH stability)
     lastStability = (tdsStability + phStability) / 2.0;
     
@@ -550,6 +585,7 @@ void analyzeWater() {
     Serial.println("--------------------------------------------");
     Serial.printf("  📊 TDS:         %.1f ppm\n", lastTDS);
     Serial.printf("  📊 pH:          %.2f\n", lastPH);
+    Serial.printf("  📊 Dissolved O₂: %.1f mg/L (mocked)\n", lastDO);
     Serial.printf("  📊 Turbidity:   %.2f NTU (mocked)\n", lastTurbidity);
     Serial.printf("  📊 Temperature: %.1f°C (mocked)\n", lastTemperature);
     Serial.printf("  📊 Stability:   %.1f%%\n", lastStability);
@@ -575,6 +611,7 @@ void sendAnalysisViaBLE() {
     String json = "{";
     json += "\"tds\":" + String(lastTDS, 1) + ",";
     json += "\"ph\":" + String(lastPH, 2) + ",";
+    json += "\"do\":" + String(lastDO, 1) + ",";
     json += "\"turbidity\":" + String(lastTurbidity, 2) + ",";
     json += "\"temperature\":" + String(lastTemperature, 1) + ",";
     json += "\"stability\":" + String(lastStability, 1) + ",";
@@ -641,6 +678,66 @@ void setupBLE() {
 // ============================================
 // WIFI & LOCATION FUNCTIONS
 // ============================================
+
+/**
+ * Sync time from NTP server (for accurate month/season detection)
+ */
+void syncNTPTime() {
+    Serial.println("🕐 Syncing time from NTP...");
+    
+    // IST = UTC + 5:30 = 19800 seconds
+    configTime(19800, 0, "pool.ntp.org", "time.google.com");
+    
+    struct tm timeinfo;
+    if (getLocalTime(&timeinfo, 5000)) {  // 5 second timeout
+        ntpSynced = true;
+        currentMonth = timeinfo.tm_mon + 1;  // tm_mon is 0-11
+        Serial.printf("   📅 Date: %d-%02d-%02d %02d:%02d (Month: %d)\n",
+            timeinfo.tm_year + 1900, currentMonth, timeinfo.tm_mday,
+            timeinfo.tm_hour, timeinfo.tm_min, currentMonth);
+    } else {
+        Serial.println("   ⚠️ NTP sync failed, estimating month from weather");
+        ntpSynced = false;
+    }
+}
+
+/**
+ * Estimate month from ambient temperature (fallback if NTP fails)
+ */
+int estimateMonthFromTemp(float temp) {
+    if (temp > 38) return 5;   // May (peak summer)
+    if (temp > 32) return 4;   // April
+    if (temp < 12) return 1;   // January (winter)
+    if (temp < 18) return 12;  // December
+    return 8;                  // August default (monsoon likely)
+}
+
+/**
+ * HTTP GET with retry mechanism
+ */
+bool httpGetWithRetry(String url, String* payload, int maxRetries = 3) {
+    HTTPClient http;
+    
+    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+        http.begin(url);
+        http.setTimeout(10000);  // 10 second timeout
+        int httpCode = http.GET();
+        
+        if (httpCode == 200) {
+            *payload = http.getString();
+            http.end();
+            return true;
+        }
+        
+        Serial.printf("   ⚠️ Attempt %d/%d failed (HTTP %d)\n", attempt, maxRetries, httpCode);
+        http.end();
+        
+        if (attempt < maxRetries) {
+            delay(2000);  // Wait before retry
+        }
+    }
+    return false;
+}
 
 /**
  * Connect to WiFi network
@@ -744,57 +841,81 @@ void fetchLocation() {
 
 /**
  * Fetch weather from OpenMeteo (free, no API key needed!)
+ * Uses retry mechanism for robustness
  */
 void fetchWeather() {
     if (!wifiConnected || detectedLat == 0) return;
     
     Serial.println("🌤️ Fetching weather...");
     
-    HTTPClient http;
     String url = "https://api.open-meteo.com/v1/forecast?latitude=" + String(detectedLat, 2) + 
                  "&longitude=" + String(detectedLon, 2) + "&current_weather=true";
-    http.begin(url);
-    int httpCode = http.GET();
     
-    if (httpCode == 200) {
-        String payload = http.getString();
-        
-        // Extract temperature and weathercode
-        int tempIdx = payload.indexOf("\"temperature\":");
-        int codeIdx = payload.indexOf("\"weathercode\":");
-        
-        if (tempIdx > 0) {
-            currentWeatherTemp = payload.substring(tempIdx + 14, payload.indexOf(",", tempIdx)).toFloat();
-        }
-        
-        if (codeIdx > 0) {
-            int weatherCode = payload.substring(codeIdx + 14, payload.indexOf(",", codeIdx)).toInt();
-            // Weather codes 51-99 indicate precipitation
-            isRaining = (weatherCode >= 51 && weatherCode <= 99);
-        }
-        
-        Serial.printf("   Weather: %.1f°C, %s\n", currentWeatherTemp, isRaining ? "🌧️ Raining" : "☀️ Clear");
-        
-        // Determine season
-        // Get current month (rough estimation from compile time)
-        // In real app, you'd use NTP time
-        int month = 1; // Default to January
-        
-        // Monsoon detection: July-September + raining
-        if (isRaining && month >= 6 && month <= 9) {
-            currentSeason = "monsoon";
-            Serial.println("   🌧️ Monsoon season detected!");
-        } else if (currentWeatherTemp > 35 && month >= 3 && month <= 5) {
-            currentSeason = "summer";
-            Serial.println("   ☀️ Summer season detected!");
-        } else {
-            currentSeason = "normal";
-        }
-    } else {
-        Serial.printf("⚠️ Weather fetch failed: %d\n", httpCode);
+    String payload;
+    if (!httpGetWithRetry(url, &payload, 3)) {
+        Serial.println("   ⚠️ Weather fetch failed after 3 attempts");
+        Serial.println("   📊 Using defaults: 28°C, normal season");
+        // Keep default ambientTemp = 28.0
+        return;
     }
     
-    http.end();
+    // Extract temperature
+    int tempIdx = payload.indexOf("\"temperature\":");
+    if (tempIdx > 0) {
+        float parsedTemp = payload.substring(tempIdx + 14, payload.indexOf(",", tempIdx)).toFloat();
+        if (parsedTemp > -50 && parsedTemp < 60) {  // Sanity check
+            ambientTemp = parsedTemp;
+        }
+    }
+    
+    // Extract weather code
+    int codeIdx = payload.indexOf("\"weathercode\":");
+    if (codeIdx > 0) {
+        int weatherCode = payload.substring(codeIdx + 14, payload.indexOf(",", codeIdx)).toInt();
+        // Weather codes 51-99 indicate precipitation
+        isRaining = (weatherCode >= 51 && weatherCode <= 99);
+    }
+    
+    Serial.printf("   🌡️ Ambient: %.1f°C, %s\n", ambientTemp, isRaining ? "🌧️ Raining" : "☀️ Clear");
+    
+    // If NTP failed, estimate month from temperature
+    if (!ntpSynced) {
+        currentMonth = estimateMonthFromTemp(ambientTemp);
+        Serial.printf("   📅 Estimated month: %d (from temp)\n", currentMonth);
+    }
+    
+    // Determine season based on real month
+    detectSeason();
+}
+
+/**
+ * Detect season based on month and weather conditions
+ */
+void detectSeason() {
+    // India seasons:
+    // Winter: Nov-Feb (month 11,12,1,2)
+    // Summer: Mar-May (month 3,4,5) 
+    // Monsoon: Jun-Sep (month 6,7,8,9)
+    // Post-monsoon: Oct (month 10)
+    
+    if (currentMonth >= 6 && currentMonth <= 9) {
+        if (isRaining) {
+            currentSeason = "monsoon";
+            Serial.println("   🌧️ Season: MONSOON (heavy rainfall expected)");
+        } else {
+            currentSeason = "monsoon";
+            Serial.println("   🌧️ Season: MONSOON PERIOD");
+        }
+    } else if (currentMonth >= 3 && currentMonth <= 5) {
+        currentSeason = "summer";
+        Serial.println("   ☀️ Season: SUMMER (high evaporation)");
+    } else if (currentMonth >= 11 || currentMonth <= 2) {
+        currentSeason = "winter";
+        Serial.println("   ❄️ Season: WINTER");
+    } else {
+        currentSeason = "normal";
+        Serial.println("   🍂 Season: POST-MONSOON");
+    }
 }
 
 // ============================================
@@ -821,16 +942,39 @@ void setup() {
     // Initialize BLE
     setupBLE();
     
-    // Load saved WiFi credentials (if any)
-    loadSavedWiFi();
+    // WIFI PRIORITY:
+    // 1. Try DEFAULT credentials first (hardcoded)
+    // 2. If fails, try SAVED credentials (from mobile app)
+    // 3. If both fail, continue without WiFi
     
-    // Connect to WiFi for location/weather
+    Serial.println("\n📶 WiFi Connection Strategy:");
+    Serial.println("   1. Trying default credentials...");
+    
+    // Step 1: Try default WiFi
+    wifiSSID = DEFAULT_WIFI_SSID;
+    wifiPassword = DEFAULT_WIFI_PASS;
     connectWiFi();
     
-    // Get location from IP (if WiFi connected)
+    // Step 2: If default failed, try saved credentials
+    if (!wifiConnected) {
+        preferences.begin("wifi", true);
+        String savedSSID = preferences.getString("ssid", "");
+        preferences.end();
+        
+        if (savedSSID.length() > 0 && savedSSID != String(DEFAULT_WIFI_SSID)) {
+            Serial.println("   2. Trying saved credentials...");
+            loadSavedWiFi();
+            connectWiFi();
+        }
+    }
+    
+    // Step 3: If connected, sync time and fetch location
     if (wifiConnected) {
-        fetchLocation();
-        fetchWeather();
+        syncNTPTime();      // Get real date/time
+        fetchLocation();    // Get location from IP
+        fetchWeather();     // Get weather + detect season
+    } else {
+        Serial.println("\n⚠️ No WiFi - using default profile (Jabalpur)");
     }
     
     // Show active profile
