@@ -116,6 +116,11 @@ body {
 
 .splash-content {
     text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    padding: 0 var(--space-lg);
 }
 
 .splash-logo {
@@ -144,18 +149,18 @@ body {
 .splash-loader {
     margin-top: var(--space-xl);
     height: 4px;
-    width: 200px;
+    width: 180px;
     background: var(--color-bg-elevated);
     border-radius: var(--radius-full);
     overflow: hidden;
 }
 
 .splash-wave {
-    width: 50%;
+    width: 40%;
     height: 100%;
     background: linear-gradient(90deg, var(--color-accent-primary), var(--color-accent-secondary));
     border-radius: var(--radius-full);
-    animation: splash-wave 1.5s ease-in-out infinite;
+    animation: splash-wave 1.2s ease-in-out infinite;
 }
 
 @keyframes splash-pulse {
@@ -986,6 +991,17 @@ body {
 .btn-wifi-save:hover {
     transform: translateY(-1px);
     box-shadow: 0 4px 15px rgba(0, 212, 255, 0.3);
+}
+
+/* Auto-detected Location Display */
+.auto-location-display {
+    padding: var(--space-md);
+    background: var(--color-bg-card);
+    border: 1px solid rgba(0, 212, 255, 0.2);
+    border-radius: var(--radius-md);
+    color: var(--color-accent-primary);
+    font-weight: 500;
+    text-align: center;
 }
 
 .btn-primary {

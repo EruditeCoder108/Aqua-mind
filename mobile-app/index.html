@@ -216,17 +216,13 @@
                 <button class="modal-close">&times;</button>
             </div>
             <div class="modal-body">
-                <div class="setting-group">
-                    <label class="setting-label">Regional Profile</label>
-                    <select id="setting-profile" class="setting-select">
-                        <option value="DHANWANTRI_NAGAR" selected>Dhanwantri Nagar, Jabalpur</option>
-                        <option value="JABALPUR">Jabalpur City, MP</option>
-                        <option value="JAIPUR">Jaipur, Rajasthan</option>
-                        <option value="CHENNAI">Chennai, Tamil Nadu</option>
-                        <option value="DELHI">Delhi NCR</option>
-                        <option value="GUWAHATI">Guwahati, Assam</option>
-                        <option value="MUMBAI">Mumbai, Maharashtra</option>
-                    </select>
+                <!-- Location is auto-detected from ESP32 WiFi -->
+                <div class="setting-group location-info">
+                    <label class="setting-label">📍 Location (Auto-detected)</label>
+                    <div class="auto-location-display">
+                        <span id="detected-location">Connect device to detect</span>
+                    </div>
+                    <p class="setting-hint">Profile is automatically selected based on your WiFi location</p>
                 </div>
 
                 <!-- WiFi Configuration -->
