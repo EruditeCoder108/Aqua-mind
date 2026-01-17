@@ -6,6 +6,7 @@
  * - ESP32 DevKit (30-pin)
  * - TDS Sensor V1.0 (GPIO 34)
  * - pH Sensor Module (GPIO 35)
+ * - WiFi for Location/Weather
  * - Turbidity: MOCKED (pending hardware)
  * - Temperature: MOCKED (pending hardware)
  * 
@@ -14,6 +15,7 @@
  * - Tri-Check burst sampling
  * - Jal-Score calculation
  * - BLE communication to mobile app
+ * - WiFi-based location & weather
  * 
  * Author: Aqua-Mind Team
  * License: MIT
@@ -23,6 +25,51 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
+#include <WiFi.h>
+#include <HTTPClient.h>
+// Using simple String-based JSON parsing (no ArduinoJson needed)
+
+// ============================================
+// WIFI CONFIGURATION
+// ============================================
+// 🔧 WiFi Credentials (Airtel router)
+const char* WIFI_SSID = "Airtel_Sam";
+const char* WIFI_PASS = "Samj@777";
+
+bool wifiConnected = false;
+
+// ============================================
+// GEO-PROFILE DATA (for auto-detection)
+// ============================================
+struct GeoProfile {
+    const char* name;
+    float lat;
+    float lon;
+    int tds_safe;
+    int tds_danger;
+    float turb_safe;
+    float turb_danger;
+};
+
+// Hardcoded profiles - easily expandable!
+const GeoProfile PROFILES[] = {
+    {"Jabalpur",  23.18, 79.98, 300, 900, 1.0, 10.0},
+    {"Jaipur",    26.91, 75.78, 400, 1200, 2.0, 10.0},
+    {"Chennai",   13.08, 80.27, 500, 1500, 1.0, 10.0},
+    {"Delhi",     28.61, 77.20, 300, 800, 1.0, 8.0},
+    {"Mumbai",    19.07, 72.87, 400, 1000, 1.0, 10.0},
+    {"Guwahati",  26.14, 91.73, 200, 700, 1.0, 8.0},
+};
+const int PROFILE_COUNT = 6;
+
+// Current active profile
+int activeProfileIndex = 0;  // Default: Jabalpur
+String detectedCity = "Unknown";
+float detectedLat = 0;
+float detectedLon = 0;
+String currentSeason = "normal";
+float currentWeatherTemp = 25.0;
+bool isRaining = false;
 
 // ============================================
 // PIN DEFINITIONS
@@ -396,6 +443,37 @@ void analyzeWater() {
     lastJalScore = calculateJalScore(lastTDS, lastPH, lastTurbidity, lastStability);
     lastVerdict = getVerdict(lastJalScore);
     
+    // =====================================
+    // CRITICAL PARAMETER OVERRIDE (Safety Net)
+    // =====================================
+    // If ANY parameter is in the "danger zone", force UNSAFE verdict
+    String criticalAlert = "";
+    
+    if (lastPH < 4.0 || lastPH > 10.0) {
+        criticalAlert = "⛔ CRITICAL: pH " + String(lastPH, 1) + " is DANGEROUS!";
+        lastVerdict = "UNSAFE";
+        lastJalScore = min(lastJalScore, 30);  // Cap score at 30
+    }
+    if (lastTDS > 800) {
+        criticalAlert = "⛔ CRITICAL: TDS " + String(lastTDS, 0) + " ppm is DANGEROUS!";
+        lastVerdict = "UNSAFE";
+        lastJalScore = min(lastJalScore, 30);
+    }
+    if (lastTurbidity > 8.0) {
+        criticalAlert = "⛔ CRITICAL: Turbidity " + String(lastTurbidity, 1) + " NTU is DANGEROUS!";
+        lastVerdict = "UNSAFE";
+        lastJalScore = min(lastJalScore, 30);
+    }
+    if (lastStability < 40) {
+        criticalAlert = "⚠️ WARNING: Sensor readings unstable! Clean probes.";
+        if (lastVerdict == "SAFE") lastVerdict = "CAUTION";
+    }
+    
+    // Print critical alert if any
+    if (criticalAlert.length() > 0) {
+        Serial.println("\n" + criticalAlert);
+    }
+    
     // Print results
     Serial.println("\n============================================");
     Serial.printf("  %s RESULT: %s\n", getVerdictEmoji(lastVerdict).c_str(), lastVerdict.c_str());
@@ -491,6 +569,165 @@ void setupBLE() {
 }
 
 // ============================================
+// WIFI & LOCATION FUNCTIONS
+// ============================================
+
+/**
+ * Connect to WiFi network
+ */
+void connectWiFi() {
+    Serial.print("📶 Connecting to WiFi: ");
+    Serial.println(WIFI_SSID);
+    
+    WiFi.begin(WIFI_SSID, WIFI_PASS);
+    
+    int attempts = 0;
+    while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+        delay(500);
+        Serial.print(".");
+        attempts++;
+    }
+    
+    if (WiFi.status() == WL_CONNECTED) {
+        wifiConnected = true;
+        Serial.println("\n✅ WiFi Connected!");
+        Serial.print("   IP Address: ");
+        Serial.println(WiFi.localIP());
+    } else {
+        wifiConnected = false;
+        Serial.println("\n⚠️ WiFi connection failed. Using default profile.");
+    }
+}
+
+/**
+ * Calculate distance between two lat/lon points (Haversine formula)
+ */
+float haversineDistance(float lat1, float lon1, float lat2, float lon2) {
+    float R = 6371; // Earth radius in km
+    float dLat = (lat2 - lat1) * PI / 180.0;
+    float dLon = (lon2 - lon1) * PI / 180.0;
+    float a = sin(dLat/2) * sin(dLat/2) + 
+              cos(lat1 * PI / 180.0) * cos(lat2 * PI / 180.0) * 
+              sin(dLon/2) * sin(dLon/2);
+    float c = 2 * atan2(sqrt(a), sqrt(1-a));
+    return R * c;
+}
+
+/**
+ * Find closest profile to given location
+ */
+void matchClosestProfile(float lat, float lon) {
+    float minDistance = 999999;
+    int closest = 0;
+    
+    for (int i = 0; i < PROFILE_COUNT; i++) {
+        float dist = haversineDistance(lat, lon, PROFILES[i].lat, PROFILES[i].lon);
+        if (dist < minDistance) {
+            minDistance = dist;
+            closest = i;
+        }
+    }
+    
+    activeProfileIndex = closest;
+    Serial.printf("📍 Matched profile: %s (%.0f km away)\n", PROFILES[closest].name, minDistance);
+}
+
+/**
+ * Fetch location via IP geolocation (ip-api.com)
+ */
+void fetchLocation() {
+    if (!wifiConnected) return;
+    
+    Serial.println("🌍 Fetching location from IP...");
+    
+    HTTPClient http;
+    http.begin("http://ip-api.com/json/");
+    int httpCode = http.GET();
+    
+    if (httpCode == 200) {
+        String payload = http.getString();
+        
+        // Simple JSON parsing (ArduinoJson would be better for complex JSON)
+        // Looking for: "lat":XX.XX,"lon":XX.XX,"city":"XXX"
+        int latIdx = payload.indexOf("\"lat\":");
+        int lonIdx = payload.indexOf("\"lon\":");
+        int cityIdx = payload.indexOf("\"city\":\"");
+        
+        if (latIdx > 0 && lonIdx > 0) {
+            detectedLat = payload.substring(latIdx + 6, payload.indexOf(",", latIdx)).toFloat();
+            detectedLon = payload.substring(lonIdx + 6, payload.indexOf(",", lonIdx)).toFloat();
+            
+            if (cityIdx > 0) {
+                int cityEnd = payload.indexOf("\"", cityIdx + 8);
+                detectedCity = payload.substring(cityIdx + 8, cityEnd);
+            }
+            
+            Serial.printf("   Location: %s (%.2f, %.2f)\n", detectedCity.c_str(), detectedLat, detectedLon);
+            matchClosestProfile(detectedLat, detectedLon);
+        }
+    } else {
+        Serial.printf("⚠️ Location fetch failed: %d\n", httpCode);
+    }
+    
+    http.end();
+}
+
+/**
+ * Fetch weather from OpenMeteo (free, no API key needed!)
+ */
+void fetchWeather() {
+    if (!wifiConnected || detectedLat == 0) return;
+    
+    Serial.println("🌤️ Fetching weather...");
+    
+    HTTPClient http;
+    String url = "https://api.open-meteo.com/v1/forecast?latitude=" + String(detectedLat, 2) + 
+                 "&longitude=" + String(detectedLon, 2) + "&current_weather=true";
+    http.begin(url);
+    int httpCode = http.GET();
+    
+    if (httpCode == 200) {
+        String payload = http.getString();
+        
+        // Extract temperature and weathercode
+        int tempIdx = payload.indexOf("\"temperature\":");
+        int codeIdx = payload.indexOf("\"weathercode\":");
+        
+        if (tempIdx > 0) {
+            currentWeatherTemp = payload.substring(tempIdx + 14, payload.indexOf(",", tempIdx)).toFloat();
+        }
+        
+        if (codeIdx > 0) {
+            int weatherCode = payload.substring(codeIdx + 14, payload.indexOf(",", codeIdx)).toInt();
+            // Weather codes 51-99 indicate precipitation
+            isRaining = (weatherCode >= 51 && weatherCode <= 99);
+        }
+        
+        Serial.printf("   Weather: %.1f°C, %s\n", currentWeatherTemp, isRaining ? "🌧️ Raining" : "☀️ Clear");
+        
+        // Determine season
+        // Get current month (rough estimation from compile time)
+        // In real app, you'd use NTP time
+        int month = 1; // Default to January
+        
+        // Monsoon detection: July-September + raining
+        if (isRaining && month >= 6 && month <= 9) {
+            currentSeason = "monsoon";
+            Serial.println("   🌧️ Monsoon season detected!");
+        } else if (currentWeatherTemp > 35 && month >= 3 && month <= 5) {
+            currentSeason = "summer";
+            Serial.println("   ☀️ Summer season detected!");
+        } else {
+            currentSeason = "normal";
+        }
+    } else {
+        Serial.printf("⚠️ Weather fetch failed: %d\n", httpCode);
+    }
+    
+    http.end();
+}
+
+// ============================================
 // SETUP
 // ============================================
 
@@ -501,7 +738,7 @@ void setup() {
     Serial.println("\n");
     Serial.println("============================================");
     Serial.println("  🌊 AQUA-MIND Water Quality Intelligence");
-    Serial.println("  📟 ESP32 Edition v1.0");
+    Serial.println("  📟 ESP32 Edition v2.0 (WiFi Enabled)");
     Serial.println("============================================");
     
     // Configure ADC
@@ -514,7 +751,22 @@ void setup() {
     // Initialize BLE
     setupBLE();
     
-    // Initial readings
+    // Connect to WiFi for location/weather
+    connectWiFi();
+    
+    // Get location from IP (if WiFi connected)
+    if (wifiConnected) {
+        fetchLocation();
+        fetchWeather();
+    }
+    
+    // Show active profile
+    Serial.println("\n📍 Active Profile: " + String(PROFILES[activeProfileIndex].name));
+    Serial.printf("   TDS Safe: %d ppm, Danger: %d ppm\n", 
+                  PROFILES[activeProfileIndex].tds_safe, 
+                  PROFILES[activeProfileIndex].tds_danger);
+    
+    // Initial sensor readings
     Serial.println("\n📡 Sensor Status:");
     Serial.printf("  TDS Sensor (GPIO %d): ", TDS_PIN);
     Serial.println(analogRead(TDS_PIN) > 0 ? "✅ Connected" : "❌ Check wiring");

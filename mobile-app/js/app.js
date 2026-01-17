@@ -68,6 +68,7 @@ class AquaMindApp {
             verdict: document.getElementById('verdict'),
             verdictMessage: document.getElementById('verdict-message'),
             scoreRingProgress: document.querySelector('.score-ring-progress'),
+            btnTestWater: document.getElementById('btn-test-water'),
 
             // Readings
             readingTds: document.getElementById('reading-tds'),
@@ -122,6 +123,11 @@ class AquaMindApp {
 
         // AI refresh
         this.elements.btnRefreshAi.addEventListener('click', () => this._runAiAnalysis());
+
+        // Test Water button (triggers analysis on ESP32)
+        if (this.elements.btnTestWater) {
+            this.elements.btnTestWater.addEventListener('click', () => this._triggerAnalysis());
+        }
 
         // Settings
         this.elements.btnSettings.addEventListener('click', () => this._openSettings());
@@ -196,15 +202,44 @@ class AquaMindApp {
             this.elements.statusDot.classList.add('connected');
             this.elements.statusDot.classList.remove('disconnected');
             this.elements.connectionBanner.classList.add('hidden');
+
+            // Show Test Water button when connected
+            if (this.elements.btnTestWater) {
+                this.elements.btnTestWater.classList.remove('hidden');
+            }
+
             this._showToast('✅', 'Device connected!');
         } else {
             this.elements.statusDot.classList.remove('connected');
             this.elements.statusDot.classList.add('disconnected');
             this.elements.connectionBanner.classList.remove('hidden');
 
+            // Hide Test Water button when disconnected
+            if (this.elements.btnTestWater) {
+                this.elements.btnTestWater.classList.add('hidden');
+            }
+
             if (this.currentData) {
                 this._showToast('📴', 'Device disconnected');
             }
+        }
+    }
+
+    /**
+     * Trigger water analysis on ESP32 via BLE command
+     */
+    async _triggerAnalysis() {
+        if (!this.bluetooth.isConnected()) {
+            this._showToast('❌', 'Not connected to device');
+            return;
+        }
+
+        try {
+            this._showToast('🔬', 'Starting analysis...');
+            await this.bluetooth.send({ type: 'REQUEST_READING' });
+        } catch (error) {
+            console.error('Failed to trigger analysis:', error);
+            this._showToast('❌', 'Failed to start analysis');
         }
     }
 
@@ -213,57 +248,140 @@ class AquaMindApp {
     _onDataReceived(data) {
         console.log('📊 Data received:', data);
 
-        if (data.type === 'ANALYSIS_RESULT') {
-            this.currentData = data;
-            this._updateDisplay(data);
-            this._addToHistory(data);
+        // ESP32 sends data directly without 'type' field
+        // Check if this looks like analysis data
+        if (data && (data.jal_score !== undefined || data.tds !== undefined || data.score !== undefined)) {
+            try {
+                // Normalize field names (ESP32 uses different names than simulated)
+                const normalizedData = {
+                    type: 'ANALYSIS_RESULT',
+                    score: data.jal_score ?? data.score ?? 0,
+                    verdict: data.verdict || 'UNKNOWN',
+                    tds: data.tds ?? 0,
+                    turb: data.turbidity ?? data.turb ?? 0,
+                    temp: data.temperature ?? data.temp ?? 25,
+                    stability: data.stability ?? 0,
+                    ph: data.ph ?? 7,
+                    message: this._getVerdictMessage(data.verdict),
+                    profile: data.profile || 'Jabalpur',
+                    alert: data.alert || ''
+                };
 
-            // Run AI analysis if enabled
-            if (this.settings.autoAi && this.gemini.hasApiKey()) {
-                this._runAiAnalysis();
+                console.log('📊 Normalized data:', normalizedData);
+
+                this.currentData = normalizedData;
+                this._updateDisplay(normalizedData);
+                this._addToHistory(normalizedData);
+
+                // Show toast
+                this._showToast('📊', `Jal-Score: ${normalizedData.score} - ${normalizedData.verdict}`);
+
+                // Run AI analysis if enabled
+                if (this.settings.autoAi && this.gemini.hasApiKey()) {
+                    this._runAiAnalysis();
+                }
+            } catch (error) {
+                console.error('Error processing data:', error);
             }
         } else if (data.type === 'ERROR') {
             this._showToast('❌', data.message);
-        } else if (data.type === 'STATUS') {
-            this._showToast('ℹ️', data.status);
+        } else if (data.type === 'STATUS' || data.status) {
+            this._showToast('ℹ️', data.status || 'Device ready');
         }
     }
 
+    /**
+     * Get verdict message
+     */
+    _getVerdictMessage(verdict) {
+        const messages = {
+            'SAFE': 'Water is safe for consumption',
+            'ACCEPTABLE': 'Water quality is acceptable',
+            'CAUTION': 'Use caution - consider treatment',
+            'UNSAFE': 'Do NOT consume without treatment!'
+        };
+        return messages[verdict] || '';
+    }
+
     _updateDisplay(data) {
-        // Update score ring
-        const score = Math.max(0, Math.min(100, data.score || 0));
-        const circumference = 2 * Math.PI * 85;
-        const offset = circumference - (score / 100) * circumference;
+        try {
+            // Update score ring
+            const score = Math.max(0, Math.min(100, data.score || 0));
+            const circumference = 2 * Math.PI * 85;
+            const offset = circumference - (score / 100) * circumference;
 
-        this.elements.scoreRingProgress.style.strokeDashoffset = offset;
-        this.elements.jalScore.textContent = Math.round(score);
+            if (this.elements.scoreRingProgress) {
+                this.elements.scoreRingProgress.style.strokeDashoffset = offset;
+            }
+            if (this.elements.jalScore) {
+                this.elements.jalScore.textContent = Math.round(score);
+            }
 
-        // Update verdict with color
-        const verdict = (data.verdict || 'UNKNOWN').toUpperCase();
-        this.elements.verdict.textContent = verdict;
-        this.elements.verdict.className = 'verdict ' + verdict.toLowerCase();
-        this.elements.verdictMessage.textContent = data.message || '';
+            // Update verdict with color
+            const verdict = (data.verdict || 'UNKNOWN').toUpperCase();
+            if (this.elements.verdict) {
+                this.elements.verdict.textContent = verdict;
+                this.elements.verdict.className = 'verdict ' + verdict.toLowerCase();
+            }
+            if (this.elements.verdictMessage) {
+                this.elements.verdictMessage.textContent = data.message || '';
+            }
 
-        // Update score ring color
-        this.elements.scoreRingProgress.className = 'score-ring-progress ' + verdict.toLowerCase();
+            // Update score ring color (SVG elements need setAttribute, not className)
+            if (this.elements.scoreRingProgress) {
+                this.elements.scoreRingProgress.setAttribute('class', 'score-ring-progress ' + verdict.toLowerCase());
+            }
 
-        // Update readings
-        this._updateReading('tds', data.tds, 1000, 'ppm');
-        this._updateReading('turb', data.turb, 20, 'NTU');
-        this._updateReading('temp', data.temp, 50, '°C');
-        this._updateReading('stability', data.stability, 100, '%');
+            // Update readings - direct DOM access for reliability
+            this._safeUpdateReading('reading-tds', 'bar-tds', data.tds, 1000, 'ppm', 1);
+            this._safeUpdateReading('reading-turb', 'bar-turb', data.turb, 20, 'NTU', 2);
+            this._safeUpdateReading('reading-temp', 'bar-temp', data.temp, 50, '°C', 1);
+            this._safeUpdateReading('reading-stability', 'bar-stability', data.stability, 100, '%', 1);
 
-        // Update profile
-        if (data.profile) {
-            this.elements.profileName.textContent = data.profile;
+            // Update profile (with null check)
+            if (data.profile && this.elements.profileName) {
+                this.elements.profileName.textContent = data.profile;
+            }
+
+            // Update seasonal alert (with null check)
+            if (this.elements.seasonalAlert) {
+                if (data.alert) {
+                    this.elements.seasonalAlert.classList.remove('hidden');
+                    if (this.elements.seasonalAlertText) {
+                        this.elements.seasonalAlertText.textContent = data.alert;
+                    }
+                } else {
+                    this.elements.seasonalAlert.classList.add('hidden');
+                }
+            }
+
+            console.log('✅ Display updated successfully');
+        } catch (error) {
+            console.error('Error updating display:', error);
         }
+    }
 
-        // Update seasonal alert
-        if (data.alert) {
-            this.elements.seasonalAlert.classList.remove('hidden');
-            this.elements.seasonalAlertText.textContent = data.alert;
-        } else {
-            this.elements.seasonalAlert.classList.add('hidden');
+    /**
+     * Safely update a reading element
+     */
+    _safeUpdateReading(readingId, barId, value, max, unit, decimals) {
+        try {
+            const displayEl = document.getElementById(readingId);
+            const barEl = document.getElementById(barId);
+
+            if (displayEl) {
+                const formatted = (value !== null && value !== undefined)
+                    ? Number(value).toFixed(decimals)
+                    : '--';
+                displayEl.innerHTML = `${formatted} <small>${unit}</small>`;
+            }
+
+            if (barEl) {
+                const percent = Math.min(100, Math.max(0, (value / max) * 100));
+                barEl.style.width = `${percent}%`;
+            }
+        } catch (error) {
+            console.error(`Error updating ${readingId}:`, error);
         }
     }
 

@@ -30,8 +30,23 @@ class BluetoothManager {
         }
     }
 
-    // ... (keep matches)
+    /**
+     * Check if Web Bluetooth is available
+     */
+    isSupported() {
+        return this.supported;
+    }
 
+    /**
+     * Check if connected
+     */
+    isConnected() {
+        return this.connected && this.device?.gatt?.connected;
+    }
+
+    /**
+     * Connect to Aqua-Mind device
+     */
     async connect() {
         if (!this.supported) {
             throw new Error('Web Bluetooth not supported');
@@ -91,6 +106,19 @@ class BluetoothManager {
         }
     }
 
+    /**
+     * Disconnect from device
+     */
+    disconnect() {
+        if (this.device?.gatt?.connected) {
+            this.device.gatt.disconnect();
+        }
+        this._handleDisconnect();
+    }
+
+    /**
+     * Handle disconnection
+     */
     _handleDisconnect() {
         console.log('📴 Bluetooth disconnected');
         this.connected = false;
@@ -104,17 +132,36 @@ class BluetoothManager {
         }
     }
 
-    // ... (keep matches)
+    /**
+     * Handle incoming data
+     */
+    _handleData(event) {
+        const value = event.target.value;
+        const decoder = new TextDecoder('utf-8');
+        const text = decoder.decode(value);
 
+        console.log('📥 Raw BLE data:', text);
+
+        // Try to parse as JSON directly (ESP32 sends complete JSON)
+        try {
+            const data = JSON.parse(text);
+            console.log('📥 Parsed data:', data);
+
+            if (this.onDataReceived) {
+                this.onDataReceived(data);
+            }
+        } catch (e) {
+            console.warn('Could not parse JSON:', text);
+        }
+    }
+
+    /**
+     * Send command to device
+     */
     async send(command) {
         if (!this.isConnected() || !this.commandChar) {
             throw new Error('Not connected');
         }
-
-        // ESP32 expects raw string commands like "ANALYZE" for simple logic
-        // But invalid commands might be ignored. Let's send what the ESP32 expects.
-        // The Arduino code looks for "ANALYZE" or "STATUS" strings.
-        // If the inputs are JSON objects (like {type: 'REQUEST_READING'}), we should convert logic.
 
         let textToSend = '';
         if (typeof command === 'object' && command.type === 'REQUEST_READING') {

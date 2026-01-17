@@ -5,7 +5,7 @@
  */
 
 class GeminiAnalyzer {
-    static API_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+    static API_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
     constructor(apiKey = null) {
         this.apiKey = apiKey;
