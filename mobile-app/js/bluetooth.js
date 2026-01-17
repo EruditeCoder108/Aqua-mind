@@ -180,6 +180,13 @@ class BluetoothManager {
     }
 
     /**
+     * Send raw command string to device (for WiFi, etc.)
+     */
+    async sendCommand(commandString) {
+        return this.send(commandString);
+    }
+
+    /**
      * Set callback for received data
      */
     setDataCallback(callback) {

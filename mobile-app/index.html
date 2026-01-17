@@ -229,6 +229,15 @@
                     </select>
                 </div>
 
+                <!-- WiFi Configuration -->
+                <div class="setting-group wifi-settings">
+                    <label class="setting-label">📶 WiFi Settings (ESP32)</label>
+                    <input type="text" id="setting-wifi-ssid" class="setting-input" placeholder="WiFi Name (SSID)">
+                    <input type="password" id="setting-wifi-password" class="setting-input" placeholder="WiFi Password">
+                    <button id="btn-save-wifi" class="btn-wifi-save">Send to Device</button>
+                    <p class="setting-hint">Configure ESP32 WiFi for auto-location</p>
+                </div>
+
                 <div class="setting-group">
                     <label class="setting-label">Gemini API Key</label>
                     <input type="password" id="setting-api-key" class="setting-input" placeholder="Enter your API key">

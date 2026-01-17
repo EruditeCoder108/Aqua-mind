@@ -27,16 +27,18 @@
 #include <BLE2902.h>
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include <Preferences.h>  // For saving WiFi credentials
 // Using simple String-based JSON parsing (no ArduinoJson needed)
 
 // ============================================
 // WIFI CONFIGURATION
 // ============================================
-// 🔧 WiFi Credentials (Airtel router)
-const char* WIFI_SSID = "Airtel_Sam";
-const char* WIFI_PASS = "Samj@777";
+// Default WiFi Credentials (can be changed via BLE)
+String wifiSSID = "Airtel_Sam";
+String wifiPassword = "Samj@777";
 
 bool wifiConnected = false;
+Preferences preferences;  // For persistent storage
 
 // ============================================
 // GEO-PROFILE DATA (for auto-detection)
@@ -187,10 +189,78 @@ class CommandCallbacks: public BLECharacteristicCallbacks {
                 analyzeWater();
             } else if (cmd == "STATUS") {
                 sendStatus();
+            } else if (cmd.startsWith("WIFI:")) {
+                // Parse WiFi credentials: WIFI:ssid:password
+                handleWiFiCommand(cmd);
             }
         }
     }
 };
+
+/**
+ * Handle WiFi credential update via BLE
+ * Format: WIFI:ssid:password
+ */
+void handleWiFiCommand(String cmd) {
+    // Remove "WIFI:" prefix
+    String credentials = cmd.substring(5);
+    
+    // Find the separator between SSID and password
+    int separatorIdx = credentials.indexOf(':');
+    if (separatorIdx > 0) {
+        String newSSID = credentials.substring(0, separatorIdx);
+        String newPassword = credentials.substring(separatorIdx + 1);
+        
+        Serial.println("📶 Saving new WiFi credentials...");
+        Serial.println("   SSID: " + newSSID);
+        Serial.println("   Password: " + String(newPassword.length()) + " chars");
+        
+        // Save to Preferences (persistent storage)
+        preferences.begin("wifi", false);
+        preferences.putString("ssid", newSSID);
+        preferences.putString("password", newPassword);
+        preferences.end();
+        
+        // Update current credentials
+        wifiSSID = newSSID;
+        wifiPassword = newPassword;
+        
+        // Send confirmation via BLE
+        String response = "{\"status\":\"wifi_saved\",\"ssid\":\"" + newSSID + "\"}";
+        pDataCharacteristic->setValue(response.c_str());
+        pDataCharacteristic->notify();
+        
+        // Reconnect with new credentials
+        Serial.println("🔄 Reconnecting to new WiFi...");
+        WiFi.disconnect();
+        delay(100);
+        connectWiFi();
+        
+        // Fetch new location if connected
+        if (wifiConnected) {
+            fetchLocation();
+            fetchWeather();
+        }
+    } else {
+        Serial.println("❌ Invalid WiFi command format. Use: WIFI:ssid:password");
+    }
+}
+
+/**
+ * Load saved WiFi credentials from Preferences
+ */
+void loadSavedWiFi() {
+    preferences.begin("wifi", true);  // Read-only
+    String savedSSID = preferences.getString("ssid", "");
+    String savedPassword = preferences.getString("password", "");
+    preferences.end();
+    
+    if (savedSSID.length() > 0) {
+        wifiSSID = savedSSID;
+        wifiPassword = savedPassword;
+        Serial.println("📂 Loaded saved WiFi: " + wifiSSID);
+    }
+}
 
 // ============================================
 // SENSOR READING FUNCTIONS
@@ -577,9 +647,9 @@ void setupBLE() {
  */
 void connectWiFi() {
     Serial.print("📶 Connecting to WiFi: ");
-    Serial.println(WIFI_SSID);
+    Serial.println(wifiSSID);
     
-    WiFi.begin(WIFI_SSID, WIFI_PASS);
+    WiFi.begin(wifiSSID.c_str(), wifiPassword.c_str());
     
     int attempts = 0;
     while (WiFi.status() != WL_CONNECTED && attempts < 20) {
@@ -750,6 +820,9 @@ void setup() {
     
     // Initialize BLE
     setupBLE();
+    
+    // Load saved WiFi credentials (if any)
+    loadSavedWiFi();
     
     // Connect to WiFi for location/weather
     connectWiFi();

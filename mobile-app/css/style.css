@@ -963,6 +963,31 @@ body {
     color: var(--color-accent-primary);
 }
 
+/* WiFi Settings */
+.wifi-settings .setting-input {
+    margin-bottom: var(--space-sm);
+}
+
+.btn-wifi-save {
+    width: 100%;
+    padding: var(--space-md);
+    margin-top: var(--space-sm);
+    background: linear-gradient(135deg, #00d4ff, #0099cc);
+    border: none;
+    border-radius: var(--radius-md);
+    color: var(--color-bg-primary);
+    font-family: var(--font-primary);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition-normal);
+}
+
+.btn-wifi-save:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 15px rgba(0, 212, 255, 0.3);
+}
+
 .btn-primary {
     width: 100%;
     padding: var(--space-md);

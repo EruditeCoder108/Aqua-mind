@@ -108,6 +108,11 @@ class AquaMindApp {
             settingSimulation: document.getElementById('setting-simulation'),
             btnSaveSettings: document.getElementById('btn-save-settings'),
 
+            // WiFi Settings
+            settingWifiSsid: document.getElementById('setting-wifi-ssid'),
+            settingWifiPassword: document.getElementById('setting-wifi-password'),
+            btnSaveWifi: document.getElementById('btn-save-wifi'),
+
             // Toast
             toastContainer: document.getElementById('toast-container')
         };
@@ -136,6 +141,11 @@ class AquaMindApp {
         this.elements.settingsModal.querySelector('.modal-backdrop').addEventListener('click',
             () => this._closeSettings());
         this.elements.btnSaveSettings.addEventListener('click', () => this._saveSettings());
+
+        // WiFi save button
+        if (this.elements.btnSaveWifi) {
+            this.elements.btnSaveWifi.addEventListener('click', () => this._sendWiFiCredentials());
+        }
 
         // Bottom nav
         document.querySelectorAll('.nav-item').forEach(item => {
@@ -240,6 +250,43 @@ class AquaMindApp {
         } catch (error) {
             console.error('Failed to trigger analysis:', error);
             this._showToast('❌', 'Failed to start analysis');
+        }
+    }
+
+    /**
+     * Send WiFi credentials to ESP32 via BLE
+     */
+    async _sendWiFiCredentials() {
+        const ssid = this.elements.settingWifiSsid?.value?.trim();
+        const password = this.elements.settingWifiPassword?.value;
+
+        if (!ssid) {
+            this._showToast('❌', 'Please enter WiFi name');
+            return;
+        }
+
+        if (!password) {
+            this._showToast('❌', 'Please enter WiFi password');
+            return;
+        }
+
+        if (!this.bluetooth.isConnected()) {
+            this._showToast('❌', 'Connect to device first');
+            return;
+        }
+
+        try {
+            // Send command: WIFI:ssid:password
+            const command = `WIFI:${ssid}:${password}`;
+            await this.bluetooth.sendCommand(command);
+
+            this._showToast('📶', `Sent WiFi: ${ssid}`);
+
+            // Clear the password field for security
+            this.elements.settingWifiPassword.value = '';
+        } catch (error) {
+            console.error('Failed to send WiFi:', error);
+            this._showToast('❌', 'Failed to send WiFi credentials');
         }
     }
 
